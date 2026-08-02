@@ -1,0 +1,79 @@
+{
+ "slug": "information-technology-act-2000",
+ "title": "Information Technology Act, 2000",
+ "short_title": "IT Act",
+ "year": 2000,
+ "act_number": "21 of 2000",
+ "aliases": [
+  "it act",
+  "information technology act",
+  "ita"
+ ],
+ "coverage": "partial",
+ "text_kind": "summary",
+ "source": "curated summary - authentic text at the India Code URL",
+ "india_code_url": "https://www.indiacode.nic.in/handle/123456789/1999",
+ "note": null,
+ "sections": [
+  {
+   "number": "43",
+   "heading": "Penalty and compensation for damage to computer system",
+   "text": "Civil liability for unauthorised access, downloading, introduction of contaminants, damage, disruption, denial of access or tampering.",
+   "chapter": null
+  },
+  {
+   "number": "43A",
+   "heading": "Compensation for failure to protect data",
+   "text": "A body corporate handling sensitive personal data that is negligent in maintaining reasonable security practices is liable to pay compensation.",
+   "chapter": null
+  },
+  {
+   "number": "65",
+   "heading": "Tampering with computer source documents",
+   "text": "Knowingly concealing, destroying or altering computer source code required to be kept by law.",
+   "chapter": null
+  },
+  {
+   "number": "66",
+   "heading": "Computer related offences",
+   "text": "Dishonestly or fraudulently doing any act referred to in section 43.",
+   "chapter": null
+  },
+  {
+   "number": "66C",
+   "heading": "Punishment for identity theft",
+   "text": "Fraudulent or dishonest use of another person's electronic signature, password or other unique identification feature.",
+   "chapter": null
+  },
+  {
+   "number": "66D",
+   "heading": "Punishment for cheating by personation using a computer resource",
+   "text": "Cheating by personation by means of any communication device or computer resource - the provision used for most online fraud.",
+   "chapter": null
+  },
+  {
+   "number": "66E",
+   "heading": "Punishment for violation of privacy",
+   "text": "Intentionally capturing, publishing or transmitting the image of a private area of any person without consent.",
+   "chapter": null
+  },
+  {
+   "number": "67",
+   "heading": "Punishment for publishing obscene material in electronic form",
+   "text": "Publishing or transmitting obscene material in electronic form.",
+   "chapter": null
+  },
+  {
+   "number": "69A",
+   "heading": "Power to issue directions for blocking public access",
+   "text": "The Central Government may direct blocking of information in the interest of sovereignty, security, public order and related grounds, following the prescribed procedure.",
+   "chapter": null
+  },
+  {
+   "number": "79",
+   "heading": "Exemption from liability of intermediary",
+   "text": "Safe harbour for intermediaries that only provide access and do not initiate, select the receiver of, or modify the transmission, subject to observing due diligence and acting on actual knowledge.",
+   "chapter": null
+  }
+ ]
+}

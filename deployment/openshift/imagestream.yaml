@@ -1,0 +1,10 @@
+apiVersion: image.openshift.io/v1
+kind: ImageStream
+metadata:
+  name: legal-mcp-server
+  labels:
+    app: legal-mcp-server
+    component: mcp-server
+spec:
+  lookupPolicy:
+    local: true

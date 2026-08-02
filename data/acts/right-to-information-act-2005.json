@@ -1,0 +1,49 @@
+{
+ "slug": "right-to-information-act-2005",
+ "title": "Right to Information Act, 2005",
+ "short_title": "RTI Act",
+ "year": 2005,
+ "act_number": "22 of 2005",
+ "aliases": [
+  "rti act",
+  "rti",
+  "right to information act"
+ ],
+ "coverage": "partial",
+ "text_kind": "summary",
+ "source": "curated summary - authentic text at the India Code URL",
+ "india_code_url": "https://www.indiacode.nic.in/handle/123456789/2029",
+ "note": null,
+ "sections": [
+  {
+   "number": "6",
+   "heading": "Request for obtaining information",
+   "text": "An application in writing or electronically, with the prescribed fee, to the Public Information Officer. The applicant is not required to give reasons for the request or any personal details beyond those necessary for contact.",
+   "chapter": null
+  },
+  {
+   "number": "7",
+   "heading": "Disposal of request",
+   "text": "The PIO must decide within thirty days of receipt, or within forty-eight hours where the information concerns life or liberty. Failure to decide within the period is deemed a refusal.",
+   "chapter": null
+  },
+  {
+   "number": "8",
+   "heading": "Exemption from disclosure of information",
+   "text": "Lists the exempt categories, including sovereignty and security, information forbidden by a court, commercial confidence, fiduciary relationship, and personal information with no public interest. Subject to the public interest override in the proviso.",
+   "chapter": null
+  },
+  {
+   "number": "19",
+   "heading": "Appeal",
+   "text": "A first appeal lies to the officer senior to the PIO within thirty days of the decision or the expiry of the response period. A second appeal lies to the Information Commission within ninety days.",
+   "chapter": null
+  },
+  {
+   "number": "20",
+   "heading": "Penalties",
+   "text": "The Information Commission may impose a penalty of two hundred and fifty rupees per day, up to twenty-five thousand rupees, on a PIO who refuses to receive an application or does not furnish information within time without reasonable cause.",
+   "chapter": null
+  }
+ ]
+}

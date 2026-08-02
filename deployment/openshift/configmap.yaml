@@ -1,0 +1,37 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: legal-mcp-server-config
+  labels:
+    app: legal-mcp-server
+    component: mcp-server
+data:
+  MCP_PORT: "5001"
+  PYTHON_LOG_LEVEL: "INFO"
+  MCP_TRANSPORT_PROTOCOL: "http"
+  CORS_ENABLED: "true"
+  ENVIRONMENT: "production"
+  ENABLE_AUTH: "false"
+  SSO_CALLBACK_URL: ""
+  SSO_AUTHORIZATION_URL: ""
+  SSO_TOKEN_URL: ""
+  SSO_INTROSPECTION_URL: ""
+  MCP_HOST_ENDPOINT: ""
+
+  # --- Legal MCP Server ---
+  DEFAULT_JURISDICTION: "IN"
+  DEFAULT_STATE: "Maharashtra"
+  DEFAULT_HIGH_COURT: "Bombay"
+  LEGAL_DATA_PATH: "/app/data"
+  DOCUMENT_STORAGE_PATH: "/app/data/documents"
+  ENABLE_CITATION_VERIFICATION: "true"
+  # Hard daily cap on Indian Kanoon spend, in INR. Search Rs 0.50, judgment
+  # Rs 0.20, passage Rs 0.05. Set "0" to disable all paid case-law calls.
+  INDIAN_KANOON_DAILY_BUDGET_INR: "100"
+  # manual | api | disabled. 'manual' returns portal instructions for a human;
+  # the official eCourts portal is CAPTCHA-gated and is never automated.
+  ECOURTS_ADAPTER: "manual"
+  # voyage | local | disabled. 'disabled' falls back to full-text search only.
+  EMBEDDING_PROVIDER: "disabled"
+  EMBEDDING_MODEL: "voyage-law-2"
+  EMBEDDING_DIMENSIONS: "1024"

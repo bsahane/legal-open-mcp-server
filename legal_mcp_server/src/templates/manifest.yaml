@@ -1,0 +1,232 @@
+# Drafting template manifest.
+#
+# Each entry declares the template file, what it produces, which parameters are
+# required, and the pre-conditions and post-execution steps a competent drafter
+# would check. The `checklist` is surfaced by review_draft, so a template can
+# carry its own procedural requirements rather than relying on the model to
+# remember them.
+
+templates:
+  - key: ni_138_notice
+    file: ni_138_notice.j2
+    title: Statutory notice under section 138 of the Negotiable Instruments Act
+    category: notice
+    description: >
+      Demand notice to the drawer of a dishonoured cheque. Must be issued within
+      30 days of the payee learning of dishonour; that period is not extendable.
+    required:
+      - sender_name
+      - sender_address
+      - notice_date
+      - recipient_name
+      - recipient_address
+      - client_name
+      - client_address
+      - liability_description
+      - cheque_number
+      - cheque_date
+      - cheque_amount
+      - amount_in_words
+      - drawee_bank
+      - drawee_branch
+      - payee_bank
+      - payee_branch
+      - presentation_date
+      - dishonour_reason
+      - dishonour_memo_date
+      - dishonour_date
+    optional:
+      - reference
+      - sender_phone
+      - sender_email
+      - drawer_account
+      - additional_facts
+      - advocate_name
+      - advocate_enrolment
+    checklist:
+      - Issued within 30 days of the payee receiving the dishonour memo (proviso (b) to s.138) - NOT extendable
+      - Demand is for the cheque amount exactly, not the amount plus interest or costs
+      - Fifteen clear days allowed for payment (proviso (c) to s.138)
+      - Sent by registered post AD to the drawer's correct address; retain the receipt and tracking
+      - Underlying debt is legally enforceable and not itself time-barred
+      - Cheque was presented within its validity period
+    authority: sections 138 and 142, Negotiable Instruments Act, 1881
+    next_steps:
+      - Diarise the 15-day payment window from the date of service
+      - Complaint may be filed only after that window expires, and within one month thereafter (s.142(b))
+      - File before the court where the payee's collecting bank branch is situated (s.142(2)(a))
+
+  - key: legal_notice_general
+    file: legal_notice_general.j2
+    title: General legal notice
+    category: notice
+    description: >
+      All-purpose pre-litigation demand notice setting out facts, legal basis
+      and demands, with a compliance period.
+    required:
+      - sender_name
+      - sender_address
+      - notice_date
+      - recipient_name
+      - recipient_address
+      - subject
+      - client_name
+      - client_address
+      - facts
+      - legal_basis
+      - demands
+      - compliance_days
+      - proposed_proceedings
+    optional:
+      - reference
+      - sender_phone
+      - sender_email
+      - send_by_email
+      - prior_attempts
+      - advocate_name
+      - advocate_enrolment
+    checklist:
+      - Facts are pleaded chronologically and are capable of proof
+      - Legal basis identifies the provision or duty breached
+      - Demands are specific, quantified and capable of compliance
+      - Compliance period is reasonable for what is demanded
+      - Claim is within limitation - compute it before sending
+      - Where the addressee is a government body, section 80 CPC requires two months' notice
+    authority: general; see section 80 CPC where the Government is the addressee
+
+  - key: reply_to_notice
+    file: reply_to_notice.j2
+    title: Reply to a legal notice
+    category: notice
+    description: >
+      Point-by-point reply denying allegations, stating the true facts and
+      raising defences, with rights reserved.
+    required:
+      - sender_name
+      - sender_address
+      - reply_date
+      - recipient_name
+      - recipient_address
+      - original_notice_date
+      - client_name
+      - client_address
+      - paragraph_responses
+      - true_facts
+    optional:
+      - reference
+      - original_reference
+      - legal_defences
+      - counter_demands
+      - advocate_name
+      - advocate_enrolment
+    checklist:
+      - Every material allegation is specifically traversed - a general denial is weak
+      - Nothing is admitted inadvertently
+      - Limitation, jurisdiction and maintainability are raised if available
+      - Reply is sent within any period the notice specified
+      - Rights and contentions are expressly reserved
+
+  - key: consumer_complaint
+    file: consumer_complaint.j2
+    title: Complaint under the Consumer Protection Act, 2019
+    category: pleading
+    description: >
+      Complaint to a District, State or National Commission, with verification.
+    required:
+      - forum_name
+      - forum_place
+      - filing_year
+      - filing_date
+      - complainant_name
+      - complainant_address
+      - opposite_party_name
+      - opposite_party_address
+      - consumer_basis
+      - opposite_party_description
+      - transaction_date
+      - transaction_description
+      - amount_paid
+      - facts
+      - cause_of_action_date
+      - jurisdiction_basis
+      - reliefs
+    optional:
+      - service_complaint
+      - advocate_name
+    checklist:
+      - Complainant is a consumer under s.2(7) - goods or services for a commercial purpose are excluded
+      - Filed within two years of the cause of action (s.69)
+      - Pecuniary jurisdiction matches the consideration paid, not the relief claimed
+      - Territorial jurisdiction pleaded under s.34(2)
+      - Reliefs are within what s.39 empowers the Commission to grant
+      - Verification is signed and dated
+    authority: sections 2(7), 34, 35 and 69, Consumer Protection Act, 2019
+
+  - key: rti_application
+    file: rti_application.j2
+    title: Application under the Right to Information Act, 2005
+    category: application
+    description: >
+      Request for information from a public authority, with fee and severability
+      requests.
+    required:
+      - public_authority
+      - authority_address
+      - application_date
+      - information_sought
+      - applicant_name
+      - applicant_address
+    optional:
+      - period_covered
+      - fee_mode
+      - fee_reference
+      - bpl
+      - life_and_liberty
+      - delivery_mode
+      - applicant_phone
+      - applicant_email
+    checklist:
+      - Each item sought is specific - a request for "all information" invites rejection
+      - No reasons for the request are given; s.6(2) does not require them
+      - Fee of Rs 10 is paid, or BPL exemption claimed with certificate
+      - Addressed to the PIO of the correct public authority
+      - Diarise 30 days for the response, and the first appeal thereafter
+    authority: sections 6, 7 and 19, Right to Information Act, 2005
+    next_steps:
+      - If no reply within 30 days, that is a deemed refusal - first appeal lies within 30 days thereafter (s.19(1))
+      - Second appeal to the Information Commission within 90 days (s.19(3))
+
+  - key: affidavit_general
+    file: affidavit_general.j2
+    title: General affidavit
+    category: affidavit
+    description: >
+      Affidavit in support of a petition or application, with verification and
+      attestation block.
+    required:
+      - forum_name
+      - forum_place
+      - case_year
+      - petitioner_name
+      - respondent_name
+      - deponent_name
+      - deponent_age
+      - deponent_occupation
+      - deponent_address
+      - deponent_capacity
+      - statements
+      - affidavit_date
+    optional:
+      - case_number
+      - case_type
+      - petitioner_role
+      - respondent_role
+      - deponent_relation
+      - accompanying_document
+    checklist:
+      - Statements are of fact within the deponent's knowledge, not argument or law
+      - Matters believed rather than known are identified as such with their source
+      - Deponent is competent and has the capacity claimed
+      - Verification clause covers every paragraph
+      - Sworn before an Oath Commissioner or Notary
+      - Stamped as required by the court's rules

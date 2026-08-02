@@ -1,0 +1,61 @@
+{
+ "slug": "transfer-of-property-act-1882",
+ "title": "Transfer of Property Act, 1882",
+ "short_title": "TP Act",
+ "year": 1882,
+ "act_number": "4 of 1882",
+ "aliases": [
+  "tpa",
+  "tp act",
+  "transfer of property act"
+ ],
+ "coverage": "partial",
+ "text_kind": "summary",
+ "source": "curated summary - authentic text at the India Code URL",
+ "india_code_url": "https://www.indiacode.nic.in/handle/123456789/2338",
+ "note": null,
+ "sections": [
+  {
+   "number": "53A",
+   "heading": "Part performance",
+   "text": "Where a transferee in part performance of a written contract for transfer of immovable property has taken possession and is willing to perform, the transferor is barred from enforcing rights against the transferee other than those expressly provided by the contract. A shield, not a sword, and the contract must be registered.",
+   "chapter": null
+  },
+  {
+   "number": "54",
+   "heading": "Sale defined",
+   "text": "Transfer of ownership in exchange for a price. Sale of tangible immovable property of value one hundred rupees and upwards can be made only by a registered instrument.",
+   "chapter": null
+  },
+  {
+   "number": "105",
+   "heading": "Lease defined",
+   "text": "A transfer of a right to enjoy immovable property for a term or in perpetuity, in consideration of a price or rent.",
+   "chapter": null
+  },
+  {
+   "number": "106",
+   "heading": "Duration of certain leases in absence of written contract",
+   "text": "A lease of immovable property for agricultural or manufacturing purposes is deemed year to year, terminable on six months' notice; any other lease is deemed month to month, terminable on fifteen days' notice.",
+   "chapter": null
+  },
+  {
+   "number": "107",
+   "heading": "Leases how made",
+   "text": "A lease from year to year, or for a term exceeding one year, or reserving a yearly rent, can be made only by a registered instrument.",
+   "chapter": null
+  },
+  {
+   "number": "108",
+   "heading": "Rights and liabilities of lessor and lessee",
+   "text": "Sets out the default obligations of landlord and tenant in the absence of contract or local usage to the contrary.",
+   "chapter": null
+  },
+  {
+   "number": "111",
+   "heading": "Determination of lease",
+   "text": "The ways a lease comes to an end: efflux of time, happening of a specified event, merger, surrender, forfeiture and notice to quit.",
+   "chapter": null
+  }
+ ]
+}

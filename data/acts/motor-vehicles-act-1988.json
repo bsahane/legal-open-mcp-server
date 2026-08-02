@@ -1,0 +1,1554 @@
+{
+ "slug": "motor-vehicles-act-1988",
+ "title": "Motor Vehicles Act, 1988",
+ "short_title": "MV Act",
+ "year": 1988,
+ "act_number": "59 of 1988",
+ "aliases": [
+  "mv act",
+  "mva",
+  "motor vehicles act"
+ ],
+ "coverage": "full",
+ "source": "civictech-India/Indian-Law-Penal-Code-Json",
+ "india_code_url": "https://www.indiacode.nic.in/handle/123456789/1798",
+ "note": null,
+ "sections": [
+  {
+   "number": "1",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "2",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "2A",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "2B",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "3",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "4",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "5",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "6",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "7",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "8",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "9",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "10",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "11",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "12",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "13",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "14",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "15",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "16",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "17",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "18",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "19",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "20",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "21",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "22",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "23",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "24",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "25",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "25A",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "26",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "27",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "28",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "29",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "30",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "31",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "32",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "33",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "34",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "35",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "36",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "37",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "38",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "39",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "40",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "41",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "42",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "43",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "44",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "45",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "46",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "47",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "48",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "49",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "50",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "51",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "52",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "53",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "54",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "55",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "56",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "57",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "58",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "59",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "60",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "61",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "62",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "62A",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "62B",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "63",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "64",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "65",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "66",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "66A",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "66B",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "67",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "68",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "69",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "70",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "71",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "72",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "73",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "74",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "75",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "76",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "77",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "78",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "79",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "80",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "81",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "82",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "83",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "84",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "85",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "86",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "87",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "88",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "88A",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "89",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "90",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "91",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "92",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "93",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "94",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "95",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "96",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "97",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "98",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "99",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "100",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "101",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "102",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "103",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "104",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "105",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "106",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "107",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "108",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "109",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "110",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "110A",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "110B",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "111",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "112",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "113",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "114",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "115",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "116",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "117",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "118",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "119",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "120",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "121",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "122",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "123",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "124",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "125",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "126",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "127",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "128",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "129",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "130",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "131",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "132",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "133",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "134",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "134A",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "135",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "136",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "136A",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "137",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "138",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "139",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "140",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "141",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "142",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "143",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "144",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "145",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "146",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "147",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "148",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "149",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "150",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "151",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "152",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "153",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "154",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "155",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "156",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "157",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "158",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "159",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "160",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "161",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "162",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "163",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "164",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "164A",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "164B",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "164C",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "164D",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "165",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "166",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "167",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "168",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "169",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "170",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "171",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "172",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "173",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "174",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "175",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "176",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "177",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "177A",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "178",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "179",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "180",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "181",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "182",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "182A",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "182B",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "183",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "184",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "185",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "186",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "187",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "188",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "189",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "190",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "191",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "192",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "192A",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "192B",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "193",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "194",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "194A",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "194B",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "194C",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "194D",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "194E",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "194F",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "195",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "196",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "197",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "198",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "198A",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "199",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "199A",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "199B",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "200",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "201",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "202",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "203",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "204",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "205",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "206",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "207",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "208",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "209",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "210",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "210A",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "210B",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "210C",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "210D",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "211",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "211A",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "212",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "213",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "214",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "215",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "215A",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "215B",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "215C",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "215D",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "216",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  },
+  {
+   "number": "217",
+   "heading": "",
+   "text": "",
+   "chapter": null
+  }
+ ]
+}

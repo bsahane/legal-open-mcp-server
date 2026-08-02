@@ -1,0 +1,79 @@
+{
+ "slug": "indian-contract-act-1872",
+ "title": "Indian Contract Act, 1872",
+ "short_title": "Contract Act",
+ "year": 1872,
+ "act_number": "9 of 1872",
+ "aliases": [
+  "contract act",
+  "ica",
+  "indian contract act"
+ ],
+ "coverage": "partial",
+ "text_kind": "summary",
+ "source": "curated summary - authentic text at the India Code URL",
+ "india_code_url": "https://www.indiacode.nic.in/handle/123456789/2187",
+ "note": null,
+ "sections": [
+  {
+   "number": "10",
+   "heading": "What agreements are contracts",
+   "text": "An agreement is a contract if made by the free consent of parties competent to contract, for a lawful consideration and with a lawful object, and not expressly declared void.",
+   "chapter": null
+  },
+  {
+   "number": "11",
+   "heading": "Who are competent to contract",
+   "text": "Every person of the age of majority, of sound mind, and not disqualified by law is competent to contract. A minor's agreement is void ab initio.",
+   "chapter": null
+  },
+  {
+   "number": "16",
+   "heading": "Undue influence",
+   "text": "A contract is induced by undue influence where one party is in a position to dominate the will of the other and uses that position to obtain an unfair advantage. Where undue influence is shown, the burden of proving the contract was not so induced lies on the dominant party.",
+   "chapter": null
+  },
+  {
+   "number": "17",
+   "heading": "Fraud",
+   "text": "Fraud includes suggesting as a fact what is not true by one who does not believe it true, active concealment, a promise made without intention of performing it, and any other act fitted to deceive. Mere silence is not fraud unless there is a duty to speak.",
+   "chapter": null
+  },
+  {
+   "number": "23",
+   "heading": "What considerations and objects are lawful",
+   "text": "Consideration or object is unlawful if forbidden by law, if it would defeat the provisions of any law, is fraudulent, involves injury to person or property, or is immoral or opposed to public policy. An agreement with unlawful consideration or object is void.",
+   "chapter": null
+  },
+  {
+   "number": "27",
+   "heading": "Agreement in restraint of trade, void",
+   "text": "Every agreement by which anyone is restrained from exercising a lawful profession, trade or business is to that extent void, subject only to the statutory exception for the sale of goodwill. Indian law does not apply the English 'reasonableness' test: a post-termination restraint on an employee is generally void, while a restraint operating during the term of employment may be upheld.",
+   "chapter": null
+  },
+  {
+   "number": "28",
+   "heading": "Agreements in restraint of legal proceedings, void",
+   "text": "An agreement that absolutely restricts a party from enforcing rights through the ordinary tribunals, or that limits the time within which rights may be enforced, is void. An exclusive-jurisdiction clause choosing between two courts that both otherwise have jurisdiction does not offend this section.",
+   "chapter": null
+  },
+  {
+   "number": "56",
+   "heading": "Agreement to do impossible act - frustration",
+   "text": "A contract to do an act which after it is made becomes impossible, or unlawful by an event the promisor could not prevent, becomes void when the act becomes impossible or unlawful. Commercial hardship or onerousness alone does not frustrate a contract.",
+   "chapter": null
+  },
+  {
+   "number": "73",
+   "heading": "Compensation for loss caused by breach of contract",
+   "text": "The party suffering breach is entitled to compensation for loss naturally arising in the usual course of things from the breach, or which the parties knew when contracting would be likely to result. Remote and indirect loss is not compensable. The claimant must mitigate.",
+   "chapter": null
+  },
+  {
+   "number": "74",
+   "heading": "Compensation for breach where penalty is stipulated",
+   "text": "Where a sum is named in the contract as payable on breach, the party complaining is entitled to reasonable compensation not exceeding that sum, whether or not actual damage is proved. Indian law does not distinguish liquidated damages from penalties in the English manner; the ceiling is the named sum and the measure is reasonableness.",
+   "chapter": null
+  }
+ ]
+}

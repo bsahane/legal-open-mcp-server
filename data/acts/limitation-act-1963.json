@@ -1,0 +1,65 @@
+{
+ "slug": "limitation-act-1963",
+ "title": "Limitation Act, 1963",
+ "short_title": "Limitation Act",
+ "year": 1963,
+ "act_number": "36 of 1963",
+ "aliases": [
+  "limitation act"
+ ],
+ "coverage": "partial",
+ "text_kind": "summary",
+ "source": "curated summary - authentic text at the India Code URL",
+ "india_code_url": "https://www.indiacode.nic.in/handle/123456789/1595",
+ "note": "The Schedule of limitation periods is modelled separately in legal_mcp_server/src/domain/limitation.py.",
+ "sections": [
+  {
+   "number": "3",
+   "heading": "Bar of limitation",
+   "text": "A suit, appeal or application filed after the prescribed period must be dismissed even if limitation is not pleaded as a defence. The court is bound to apply it of its own motion.",
+   "chapter": null
+  },
+  {
+   "number": "4",
+   "heading": "Expiry of prescribed period when court is closed",
+   "text": "Where the prescribed period expires on a day the court is closed, the proceeding may be instituted on the next day the court reopens.",
+   "chapter": null
+  },
+  {
+   "number": "5",
+   "heading": "Extension of prescribed period in certain cases",
+   "text": "An appeal or application (not a suit) may be admitted after the prescribed period if the applicant satisfies the court of sufficient cause for the delay. Section 5 does not apply to suits.",
+   "chapter": null
+  },
+  {
+   "number": "12",
+   "heading": "Exclusion of time in legal proceedings",
+   "text": "In computing limitation, the day from which the period runs is excluded. For an appeal or revision, the time taken to obtain a copy of the decree, order or judgment appealed from is also excluded.",
+   "chapter": null
+  },
+  {
+   "number": "14",
+   "heading": "Exclusion of time of proceeding bona fide in court without jurisdiction",
+   "text": "Time spent prosecuting another civil proceeding with due diligence and in good faith, against the same party and for the same relief, is excluded where that proceeding failed for defect of jurisdiction or other cause of a like nature.",
+   "chapter": null
+  },
+  {
+   "number": "17",
+   "heading": "Effect of fraud or mistake",
+   "text": "Where the suit is based on fraud, or the right of action is concealed by fraud, or relief is sought from the consequences of a mistake, limitation runs from when the plaintiff discovered the fraud or mistake, or could with reasonable diligence have discovered it.",
+   "chapter": null
+  },
+  {
+   "number": "18",
+   "heading": "Effect of acknowledgment in writing",
+   "text": "A fresh period of limitation runs from the date of a signed written acknowledgment of liability, provided it is made before the original period expires. An acknowledgment after expiry does not revive a time-barred claim.",
+   "chapter": null
+  },
+  {
+   "number": "19",
+   "heading": "Effect of payment on account of debt or of interest on legacy",
+   "text": "Where part payment of a debt, or payment of interest, is made before expiry of the period, a fresh period runs from the date of payment, provided the payment is acknowledged in the payer's handwriting or in a signed writing.",
+   "chapter": null
+  }
+ ]
+}

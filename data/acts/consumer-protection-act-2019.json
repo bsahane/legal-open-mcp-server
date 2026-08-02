@@ -1,0 +1,55 @@
+{
+ "slug": "consumer-protection-act-2019",
+ "title": "Consumer Protection Act, 2019",
+ "short_title": "CPA 2019",
+ "year": 2019,
+ "act_number": "35 of 2019",
+ "aliases": [
+  "cpa",
+  "consumer protection act",
+  "consumer act"
+ ],
+ "coverage": "partial",
+ "text_kind": "summary",
+ "source": "curated summary - authentic text at the India Code URL",
+ "india_code_url": "https://www.indiacode.nic.in/handle/123456789/15256",
+ "note": null,
+ "sections": [
+  {
+   "number": "2(7)",
+   "heading": "Definition of consumer",
+   "text": "A person who buys goods or hires services for consideration, including a user with the buyer's approval, but excluding a person who obtains goods for resale or services for a commercial purpose. Goods or services obtained exclusively for earning a livelihood by self-employment are not a commercial purpose.",
+   "chapter": null
+  },
+  {
+   "number": "2(11)",
+   "heading": "Definition of deficiency",
+   "text": "Any fault, imperfection, shortcoming or inadequacy in the quality, nature or manner of performance of a service required to be maintained by law or undertaken by contract, including any act of negligence or withholding of relevant information.",
+   "chapter": null
+  },
+  {
+   "number": "34",
+   "heading": "Jurisdiction of District Commission",
+   "text": "The District Commission entertains complaints where the value of the goods or services paid as consideration does not exceed the prescribed pecuniary limit. A complaint may be filed where the opposite party resides or carries on business, where the cause of action arose, or where the complainant resides or personally works for gain.",
+   "chapter": null
+  },
+  {
+   "number": "35",
+   "heading": "Manner in which complaint shall be made",
+   "text": "A complaint may be filed by the consumer, a recognised consumer association, one or more consumers with the same interest, the Central or a State Government, or the Central Authority. Complaints may be filed electronically.",
+   "chapter": null
+  },
+  {
+   "number": "38",
+   "heading": "Procedure on admission of complaint",
+   "text": "The Commission refers a copy to the opposite party, which must respond within thirty days, extendable by up to fifteen days. Complaints are to be decided within three months, or five months where analysis or testing of goods is required.",
+   "chapter": null
+  },
+  {
+   "number": "69",
+   "heading": "Limitation period",
+   "text": "A complaint must be filed within two years from the date on which the cause of action arose. A complaint may be entertained after that period if the complainant satisfies the Commission of sufficient cause, with reasons recorded.",
+   "chapter": null
+  }
+ ]
+}

@@ -1,0 +1,67 @@
+{{ sender_name | upper }}
+{{ sender_address }}
+
+Ref: {{ reference | default('NIL') }}
+Date: {{ reply_date }}
+
+BY REGISTERED POST A.D.
+
+To,
+{{ recipient_name }}
+{{ recipient_address }}
+
+Sub: Reply to your notice dated {{ original_notice_date }}
+     {% if original_reference %}(Ref: {{ original_reference }}){% endif %}
+
+Sir/Madam,
+
+Under instructions from and on behalf of my client {{ client_name }},
+{{ client_address }}, I reply to your notice dated {{ original_notice_date }}
+(hereinafter "the said notice") as under:
+
+1. That the contents of the said notice are denied in their entirety save to
+   the extent expressly admitted herein. Nothing in the said notice shall be
+   deemed admitted merely for want of specific traverse.
+
+{% for response in paragraph_responses %}
+{{ loop.index + 1 }}. As to paragraph {{ response.paragraph }} of the said
+   notice: {{ response.reply }}
+{% endfor %}
+
+{{ paragraph_responses | length + 2 }}. That the true and correct facts are as
+   follows:
+{% for fact in true_facts %}
+   ({{ "abcdefghij"[loop.index0] }}) {{ fact }};
+{% endfor %}
+
+{% if legal_defences %}
+{{ paragraph_responses | length + 3 }}. That, without prejudice, my client
+   raises the following contentions in law:
+{% for defence in legal_defences %}
+   ({{ "abcdefghij"[loop.index0] }}) {{ defence }};
+{% endfor %}
+{% endif %}
+
+{% if counter_demands %}
+{{ paragraph_responses | length + (4 if legal_defences else 3) }}. That my
+   client, on the contrary, calls upon you to:
+{% for demand in counter_demands %}
+   ({{ "abcdefghij"[loop.index0] }}) {{ demand }};
+{% endfor %}
+{% endif %}
+
+In the circumstances, the said notice is misconceived, untenable and liable to
+be withdrawn. My client denies any liability whatsoever as alleged or at all,
+and reserves the right to take such action as may be advised, including
+proceedings for the costs and consequences of the said notice.
+
+This reply is issued without prejudice to my client's rights and contentions,
+all of which are expressly reserved.
+
+Yours faithfully,
+
+
+{{ advocate_name | default(sender_name) }}
+{% if advocate_enrolment %}Advocate, Enrolment No. {{ advocate_enrolment }}{% endif %}
+
+Copy to: My client, {{ client_name }}, for record.

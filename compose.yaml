@@ -1,0 +1,58 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: legal-mcp-postgres
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - legal-network
+
+  legal-mcp-server:
+    build:
+      context: .
+      dockerfile: Containerfile
+    container_name: legal-mcp-server
+    ports:
+      - "5001:5001"
+    env_file:
+      - .env
+    environment:
+      - MCP_HOST=0.0.0.0
+      - MCP_PORT=5001
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=postgres
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: always
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "-k", "http://0.0.0.0:5001/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - legal-network
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  legal-network:
+    driver: bridge

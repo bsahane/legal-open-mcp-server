@@ -1,0 +1,96 @@
+BEFORE THE {{ forum_name | upper }}
+{{ forum_place | upper }}
+
+CONSUMER COMPLAINT NO. ________ OF {{ filing_year }}
+
+IN THE MATTER OF:
+
+{{ complainant_name }}
+{{ complainant_address }}
+                                                        ... COMPLAINANT
+
+                              VERSUS
+
+{{ opposite_party_name }}
+{{ opposite_party_address }}
+                                                        ... OPPOSITE PARTY
+
+
+COMPLAINT UNDER SECTION 35 OF THE CONSUMER PROTECTION ACT, 2019
+
+MOST RESPECTFULLY SHOWETH:
+
+1. That the Complainant is a consumer within the meaning of Section 2(7) of
+   the Consumer Protection Act, 2019, having {{ consumer_basis }}.
+
+2. That the Opposite Party is {{ opposite_party_description }} and is a
+   {% if service_complaint %}service provider{% else %}trader/seller{% endif %}
+   within the meaning of the Act.
+
+3. That on {{ transaction_date }}, the Complainant
+   {{ transaction_description }} for a consideration of
+   Rs {{ amount_paid | inr }}/-.
+
+{% for fact in facts %}
+{{ loop.index + 3 }}. That {{ fact }}
+{% endfor %}
+
+{{ facts | length + 4 }}. That the aforesaid acts of the Opposite Party amount
+   to {% if service_complaint %}deficiency in service within the meaning of
+   Section 2(11){% else %}sale of defective goods and unfair trade practice
+   within the meaning of Sections 2(10) and 2(47){% endif %} of the Consumer
+   Protection Act, 2019.
+
+{{ facts | length + 5 }}. That the Complainant has suffered mental agony,
+   harassment and financial loss on account of the said deficiency.
+
+{{ facts | length + 6 }}. LIMITATION: That the cause of action arose on
+   {{ cause_of_action_date }} and this complaint is filed within two years
+   thereof as required by Section 69 of the Act.
+
+{{ facts | length + 7 }}. JURISDICTION: That this Hon'ble Commission has
+   pecuniary jurisdiction as the consideration paid is
+   Rs {{ amount_paid | inr }}/-, and territorial jurisdiction as
+   {{ jurisdiction_basis }}.
+
+{{ facts | length + 8 }}. That the requisite court fee has been paid.
+
+PRAYER:
+
+It is therefore most respectfully prayed that this Hon'ble Commission may be
+pleased to:
+
+{% for relief in reliefs %}
+   {{ "abcdefgh"[loop.index0] }}) {{ relief }};
+{% endfor %}
+   {{ "abcdefgh"[reliefs | length] }}) award costs of this complaint to the
+      Complainant; and
+   {{ "abcdefgh"[reliefs | length + 1] }}) pass such other and further orders as
+      this Hon'ble Commission may deem fit in the facts and circumstances of
+      the case.
+
+AND FOR THIS ACT OF KINDNESS, THE COMPLAINANT SHALL AS IN DUTY BOUND EVER PRAY.
+
+
+Place: {{ forum_place }}
+Date: {{ filing_date }}
+                                                        COMPLAINANT
+
+                                                Through
+
+
+                                                {{ advocate_name | default('') }}
+                                                Advocate for the Complainant
+
+
+VERIFICATION
+
+I, {{ complainant_name }}, the Complainant above named, do hereby verify that
+the contents of paragraphs 1 to {{ facts | length + 8 }} of the above complaint
+are true to my knowledge and belief, and that nothing material has been
+concealed therefrom.
+
+Verified at {{ forum_place }} on this {{ filing_date }}.
+
+
+                                                        COMPLAINANT

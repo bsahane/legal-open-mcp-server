@@ -1,0 +1,68 @@
+{{ sender_name | upper }}
+{{ sender_address }}
+{% if sender_phone %}Tel: {{ sender_phone }}{% endif %}
+{% if sender_email %}Email: {{ sender_email }}{% endif %}
+
+Ref: {{ reference | default('NIL') }}
+Date: {{ notice_date }}
+
+BY REGISTERED POST A.D.{% if sender_email %} AND BY EMAIL{% endif %}
+
+To,
+{{ recipient_name }}
+{{ recipient_address }}
+
+Sub: Statutory notice under Section 138 read with Section 142 of the
+     Negotiable Instruments Act, 1881 demanding payment of Rs {{ cheque_amount | inr }}/-
+     against dishonoured cheque No. {{ cheque_number }} dated {{ cheque_date }}
+
+Sir/Madam,
+
+Under instructions from and on behalf of my client {{ client_name }},
+{{ client_address }} (hereinafter "my client"), I address you as under:
+
+1. That you are well acquainted with my client and the transactions between
+   you and my client.
+
+2. That {{ liability_description }}. You were and continue to be legally liable
+   to pay a sum of Rs {{ cheque_amount | inr }}/- (Rupees {{ amount_in_words }} only)
+   to my client.
+
+3. That in discharge of the said legally enforceable debt and liability, you
+   issued to my client cheque bearing No. {{ cheque_number }} dated {{ cheque_date }}
+   for a sum of Rs {{ cheque_amount | inr }}/- drawn on {{ drawee_bank }},
+   {{ drawee_branch }} branch{% if drawer_account %}, from your account
+   No. {{ drawer_account }}{% endif %} (hereinafter "the said cheque").
+
+4. That my client presented the said cheque for encashment through
+   {{ payee_bank }}, {{ payee_branch }} branch, on {{ presentation_date }}.
+
+5. That the said cheque was returned unpaid by the drawee bank with the
+   endorsement "{{ dishonour_reason }}", and the said return memo dated
+   {{ dishonour_memo_date }} was received by my client on {{ dishonour_date }}.
+
+6. That the dishonour of the said cheque is on account of your act and
+   omission, and constitutes an offence punishable under Section 138 of the
+   Negotiable Instruments Act, 1881.
+{% if additional_facts %}
+7. That {{ additional_facts }}
+{% endif %}
+
+I therefore call upon you, through this notice, to pay to my client the sum of
+Rs {{ cheque_amount | inr }}/- (Rupees {{ amount_in_words }} only)
+within FIFTEEN (15) DAYS from the date of receipt of this notice, failing which
+my client shall be constrained to initiate criminal proceedings against you
+under Section 138 of the Negotiable Instruments Act, 1881 before the competent
+court, entirely at your risk as to costs and consequences, and shall also be
+at liberty to pursue such civil remedies as are available in law for recovery
+of the said amount together with interest and costs.
+
+A copy of this notice is retained in my office for further necessary action.
+
+Yours faithfully,
+
+
+{{ advocate_name | default(sender_name) }}
+{% if advocate_enrolment %}Advocate, Enrolment No. {{ advocate_enrolment }}{% endif %}
+
+Copy to: My client, {{ client_name }}, for record.

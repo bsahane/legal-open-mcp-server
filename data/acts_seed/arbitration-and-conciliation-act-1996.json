@@ -1,0 +1,73 @@
+{
+ "slug": "arbitration-and-conciliation-act-1996",
+ "title": "Arbitration and Conciliation Act, 1996",
+ "short_title": "Arbitration Act",
+ "year": 1996,
+ "act_number": "26 of 1996",
+ "aliases": [
+  "arbitration act",
+  "a&c act",
+  "arbitration and conciliation act"
+ ],
+ "coverage": "partial",
+ "text_kind": "summary",
+ "source": "curated summary - authentic text at the India Code URL",
+ "india_code_url": "https://www.indiacode.nic.in/handle/123456789/1978",
+ "note": null,
+ "sections": [
+  {
+   "number": "7",
+   "heading": "Arbitration agreement",
+   "text": "An agreement to submit present or future disputes to arbitration. It must be in writing, which includes an exchange of communications or pleadings in which existence is alleged and not denied.",
+   "chapter": null
+  },
+  {
+   "number": "8",
+   "heading": "Power to refer parties to arbitration",
+   "text": "A judicial authority before which an action is brought in a matter covered by an arbitration agreement shall refer the parties to arbitration unless it finds prima facie that no valid agreement exists.",
+   "chapter": null
+  },
+  {
+   "number": "9",
+   "heading": "Interim measures by court",
+   "text": "A party may apply to court for interim measures before or during arbitral proceedings, or after the award but before enforcement.",
+   "chapter": null
+  },
+  {
+   "number": "11",
+   "heading": "Appointment of arbitrators",
+   "text": "Where parties fail to appoint under the agreed procedure, the Supreme Court or High Court, or a person or institution designated by it, makes the appointment, confining itself to the existence of the agreement.",
+   "chapter": null
+  },
+  {
+   "number": "16",
+   "heading": "Competence of arbitral tribunal to rule on its jurisdiction",
+   "text": "The kompetenz-kompetenz principle: the tribunal may rule on its own jurisdiction, including on the existence or validity of the arbitration agreement, which is treated as separable from the main contract.",
+   "chapter": null
+  },
+  {
+   "number": "21",
+   "heading": "Commencement of arbitral proceedings",
+   "text": "Unless otherwise agreed, proceedings commence on the date the request to refer the dispute to arbitration is received by the respondent. Relevant to limitation.",
+   "chapter": null
+  },
+  {
+   "number": "29A",
+   "heading": "Time limit for arbitral award",
+   "text": "The award in a domestic arbitration is to be made within twelve months from completion of pleadings, extendable by six months by consent and thereafter only by the court.",
+   "chapter": null
+  },
+  {
+   "number": "34",
+   "heading": "Application for setting aside arbitral award",
+   "text": "The only recourse against an award. Grounds are narrow: incapacity, invalid agreement, want of notice, matters beyond the scope of submission, irregular composition, non-arbitrability, or conflict with the public policy of India. Must be filed within three months, extendable by thirty days on sufficient cause and no further.",
+   "chapter": null
+  },
+  {
+   "number": "37",
+   "heading": "Appealable orders",
+   "text": "Appeals lie from orders refusing to refer to arbitration, granting or refusing interim measures, and setting aside or refusing to set aside an award.",
+   "chapter": null
+  }
+ ]
+}

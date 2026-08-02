@@ -1,0 +1,72 @@
+{
+ "slug": "bharatiya-sakshya-adhiniyam-2023",
+ "title": "Bharatiya Sakshya Adhiniyam, 2023",
+ "short_title": "BSA",
+ "year": 2023,
+ "act_number": "47 of 2023",
+ "aliases": [
+  "bsa",
+  "sakshya adhiniyam"
+ ],
+ "coverage": "partial",
+ "text_kind": "summary",
+ "source": "curated summary - authentic text at the India Code URL",
+ "india_code_url": "https://www.indiacode.nic.in/handle/123456789/20064",
+ "note": "In force from 1 July 2024. Replaced the Indian Evidence Act, 1872.",
+ "sections": [
+  {
+   "number": "3",
+   "heading": "Evidence may be given of facts in issue and relevant facts",
+   "text": "Corresponds to section 5 of the Evidence Act.",
+   "chapter": null
+  },
+  {
+   "number": "24",
+   "heading": "Admission defined",
+   "text": "Corresponds to section 17 of the Evidence Act.",
+   "chapter": null
+  },
+  {
+   "number": "39",
+   "heading": "Opinion of experts",
+   "text": "Corresponds to section 45 of the Evidence Act.",
+   "chapter": null
+  },
+  {
+   "number": "57",
+   "heading": "Primary evidence",
+   "text": "Corresponds to section 62 of the Evidence Act.",
+   "chapter": null
+  },
+  {
+   "number": "58",
+   "heading": "Secondary evidence",
+   "text": "Corresponds to section 63 of the Evidence Act.",
+   "chapter": null
+  },
+  {
+   "number": "61",
+   "heading": "Electronic or digital record",
+   "text": "Electronic records are not to be denied admissibility solely on the ground of being electronic. No direct Evidence Act equivalent.",
+   "chapter": null
+  },
+  {
+   "number": "63",
+   "heading": "Admissibility of electronic records",
+   "text": "Conditions for admitting computer output, with a certificate requirement. Corresponds to section 65B of the Evidence Act.",
+   "chapter": null
+  },
+  {
+   "number": "104",
+   "heading": "Burden of proof",
+   "text": "Corresponds to section 101 of the Evidence Act.",
+   "chapter": null
+  },
+  {
+   "number": "119",
+   "heading": "Presumption as to abetment of suicide by a married woman",
+   "text": "Corresponds to section 113A of the Evidence Act.",
+   "chapter": null
+  }
+ ]
+}

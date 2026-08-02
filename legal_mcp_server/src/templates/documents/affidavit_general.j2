@@ -1,0 +1,59 @@
+BEFORE THE {{ forum_name | upper }}
+{{ forum_place | upper }}
+
+{% if case_number %}{{ case_type | default('CASE') | upper }} NO. {{ case_number }} OF {{ case_year }}{% else %}______________ NO. ________ OF {{ case_year }}{% endif %}
+
+IN THE MATTER OF:
+
+{{ petitioner_name }}
+                                                        ... {{ petitioner_role | default('PETITIONER') | upper }}
+
+                              VERSUS
+
+{{ respondent_name }}
+                                                        ... {{ respondent_role | default('RESPONDENT') | upper }}
+
+
+AFFIDAVIT OF {{ deponent_name | upper }}
+
+I, {{ deponent_name }}, aged about {{ deponent_age }} years,
+{{ deponent_occupation }}, {% if deponent_relation %}{{ deponent_relation }},
+{% endif %}residing at {{ deponent_address }}, do hereby solemnly affirm and
+state on oath as under:
+
+1. That I am the {{ deponent_capacity }} in the above matter and am fully
+   conversant with the facts and circumstances of the case, and am competent to
+   swear this affidavit.
+
+{% for statement in statements %}
+{{ loop.index + 1 }}. That {{ statement }}
+{% endfor %}
+
+{{ statements | length + 2 }}. That the contents of the accompanying
+   {{ accompanying_document | default('petition') }} have been read over and
+   explained to me and the same are true and correct to my knowledge.
+
+{{ statements | length + 3 }}. That I have not concealed any material fact from
+   this Hon'ble Court.
+
+
+                                                        DEPONENT
+
+
+VERIFICATION
+
+I, the deponent above named, do hereby verify that the contents of paragraphs
+1 to {{ statements | length + 3 }} of this affidavit are true and correct to my
+knowledge, no part of it is false and nothing material has been concealed
+therefrom.
+
+Verified at {{ forum_place }} on this {{ affidavit_date }}.
+
+
+                                                        DEPONENT
+
+Solemnly affirmed before me on this {{ affidavit_date }}.
+
+
+                                                        OATH COMMISSIONER /
+                                                        NOTARY PUBLIC

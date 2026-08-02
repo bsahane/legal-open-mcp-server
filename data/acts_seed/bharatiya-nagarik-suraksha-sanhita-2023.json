@@ -1,0 +1,84 @@
+{
+ "slug": "bharatiya-nagarik-suraksha-sanhita-2023",
+ "title": "Bharatiya Nagarik Suraksha Sanhita, 2023",
+ "short_title": "BNSS",
+ "year": 2023,
+ "act_number": "46 of 2023",
+ "aliases": [
+  "bnss",
+  "nagarik suraksha sanhita"
+ ],
+ "coverage": "partial",
+ "text_kind": "summary",
+ "source": "curated summary - authentic text at the India Code URL",
+ "india_code_url": "https://www.indiacode.nic.in/handle/123456789/20063",
+ "note": "In force from 1 July 2024. Replaced the Code of Criminal Procedure, 1973.",
+ "sections": [
+  {
+   "number": "173",
+   "heading": "Information in cognizable cases",
+   "text": "Registration of a First Information Report, including zero FIR and electronic registration. Corresponds to section 154 CrPC.",
+   "chapter": null
+  },
+  {
+   "number": "175",
+   "heading": "Police officer's power to investigate cognizable case",
+   "text": "Corresponds to section 156 CrPC, including the magistrate's power to order investigation.",
+   "chapter": null
+  },
+  {
+   "number": "187",
+   "heading": "Procedure when investigation cannot be completed in 24 hours",
+   "text": "Remand provisions. Corresponds to section 167 CrPC.",
+   "chapter": null
+  },
+  {
+   "number": "193",
+   "heading": "Report of police officer on completion of investigation",
+   "text": "The charge-sheet. Corresponds to section 173 CrPC.",
+   "chapter": null
+  },
+  {
+   "number": "223",
+   "heading": "Examination of complainant",
+   "text": "Corresponds to section 200 CrPC; adds a mandatory hearing for the accused before cognizance on a complaint.",
+   "chapter": null
+  },
+  {
+   "number": "262",
+   "heading": "Discharge",
+   "text": "Corresponds to section 227 CrPC.",
+   "chapter": null
+  },
+  {
+   "number": "478",
+   "heading": "Bail in bailable offences",
+   "text": "Corresponds to section 436 CrPC.",
+   "chapter": null
+  },
+  {
+   "number": "479",
+   "heading": "Maximum period of detention of undertrial prisoner",
+   "text": "Corresponds to section 436A CrPC, with a stricter regime for first-time offenders.",
+   "chapter": null
+  },
+  {
+   "number": "480",
+   "heading": "Bail in non-bailable offences",
+   "text": "Corresponds to section 437 CrPC.",
+   "chapter": null
+  },
+  {
+   "number": "482",
+   "heading": "Anticipatory bail",
+   "text": "Direction for release on bail to a person apprehending arrest. Corresponds to section 438 CrPC.",
+   "chapter": null
+  },
+  {
+   "number": "528",
+   "heading": "Inherent powers of the High Court",
+   "text": "Corresponds to section 482 CrPC - the quashing jurisdiction.",
+   "chapter": null
+  }
+ ]
+}

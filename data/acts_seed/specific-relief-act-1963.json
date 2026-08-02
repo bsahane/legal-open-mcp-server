@@ -1,0 +1,60 @@
+{
+ "slug": "specific-relief-act-1963",
+ "title": "Specific Relief Act, 1963",
+ "short_title": "SRA",
+ "year": 1963,
+ "act_number": "47 of 1963",
+ "aliases": [
+  "specific relief act",
+  "sra"
+ ],
+ "coverage": "partial",
+ "text_kind": "summary",
+ "source": "curated summary - authentic text at the India Code URL",
+ "india_code_url": "https://www.indiacode.nic.in/handle/123456789/1583",
+ "note": null,
+ "sections": [
+  {
+   "number": "10",
+   "heading": "Specific performance of contract",
+   "text": "Specific performance shall be enforced by the court subject to the limits in sections 11(2), 14 and 16. Since the 2018 amendment it is a general rule rather than a discretionary remedy.",
+   "chapter": null
+  },
+  {
+   "number": "14",
+   "heading": "Contracts not specifically enforceable",
+   "text": "Includes contracts where a party has obtained substituted performance, those involving continuous duty the court cannot supervise, those dependent on personal qualifications, and those determinable in nature.",
+   "chapter": null
+  },
+  {
+   "number": "16",
+   "heading": "Personal bars to relief",
+   "text": "Specific performance is not to be granted to one who has obtained substituted performance, is incapable of performing, or fails to prove readiness and willingness to perform their part throughout.",
+   "chapter": null
+  },
+  {
+   "number": "20A",
+   "heading": "No injunction in infrastructure project contracts",
+   "text": "Courts shall not grant an injunction where it would cause impediment or delay in the progress of a notified infrastructure project.",
+   "chapter": null
+  },
+  {
+   "number": "34",
+   "heading": "Discretion of court as to declaration of status or right",
+   "text": "A person entitled to a legal character or right to property may sue for a declaration; but no declaration shall be made where the plaintiff, being able to seek further relief, omits to do so.",
+   "chapter": null
+  },
+  {
+   "number": "38",
+   "heading": "Perpetual injunction when granted",
+   "text": "A perpetual injunction may be granted to prevent breach of an obligation existing in the plaintiff's favour, including where the defendant invades or threatens to invade the plaintiff's right to enjoyment of property.",
+   "chapter": null
+  },
+  {
+   "number": "41",
+   "heading": "Injunction when refused",
+   "text": "Lists the cases in which an injunction cannot be granted, including to restrain proceedings in a court not subordinate to that from which the injunction is sought, and where equally efficacious relief is available.",
+   "chapter": null
+  }
+ ]
+}

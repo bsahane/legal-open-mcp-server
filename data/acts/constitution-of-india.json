@@ -1,0 +1,73 @@
+{
+ "slug": "constitution-of-india",
+ "title": "Constitution of India",
+ "short_title": "Constitution",
+ "year": 1950,
+ "act_number": "-",
+ "aliases": [
+  "constitution",
+  "constitution of india",
+  "coi"
+ ],
+ "coverage": "partial",
+ "text_kind": "summary",
+ "source": "curated summary - authentic text at the India Code URL",
+ "india_code_url": "https://www.indiacode.nic.in/handle/123456789/15240",
+ "note": "Entries are Articles, not sections.",
+ "sections": [
+  {
+   "number": "14",
+   "heading": "Equality before law",
+   "text": "The State shall not deny to any person equality before the law or the equal protection of the laws within the territory of India.",
+   "chapter": null
+  },
+  {
+   "number": "19",
+   "heading": "Protection of certain rights regarding freedom of speech etc.",
+   "text": "Guarantees to citizens freedom of speech and expression, assembly, association, movement, residence, and profession, each subject to reasonable restrictions on the grounds specified in the Article.",
+   "chapter": null
+  },
+  {
+   "number": "20",
+   "heading": "Protection in respect of conviction for offences",
+   "text": "No ex post facto criminal liability, no double jeopardy, and no compulsion to be a witness against oneself.",
+   "chapter": null
+  },
+  {
+   "number": "21",
+   "heading": "Protection of life and personal liberty",
+   "text": "No person shall be deprived of life or personal liberty except according to procedure established by law - read to require that the procedure be fair, just and reasonable.",
+   "chapter": null
+  },
+  {
+   "number": "22",
+   "heading": "Protection against arrest and detention in certain cases",
+   "text": "Grounds of arrest to be communicated, right to consult a legal practitioner, and production before a magistrate within 24 hours.",
+   "chapter": null
+  },
+  {
+   "number": "32",
+   "heading": "Remedies for enforcement of fundamental rights",
+   "text": "The right to move the Supreme Court by appropriate proceedings for the enforcement of fundamental rights. Itself a fundamental right.",
+   "chapter": null
+  },
+  {
+   "number": "226",
+   "heading": "Power of High Courts to issue certain writs",
+   "text": "Every High Court may issue writs for the enforcement of fundamental rights and for any other purpose, throughout its territorial jurisdiction. Wider than Article 32.",
+   "chapter": null
+  },
+  {
+   "number": "227",
+   "heading": "Power of superintendence over all courts by the High Court",
+   "text": "Supervisory jurisdiction over all courts and tribunals within the High Court's territories.",
+   "chapter": null
+  },
+  {
+   "number": "300A",
+   "heading": "Persons not to be deprived of property save by authority of law",
+   "text": "No person shall be deprived of property save by authority of law. A constitutional right, not a fundamental right.",
+   "chapter": null
+  }
+ ]
+}

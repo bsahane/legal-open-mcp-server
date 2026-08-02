@@ -1,0 +1,133 @@
+{
+ "slug": "bharatiya-nyaya-sanhita-2023",
+ "title": "Bharatiya Nyaya Sanhita, 2023",
+ "short_title": "BNS",
+ "year": 2023,
+ "act_number": "45 of 2023",
+ "aliases": [
+  "bns",
+  "nyaya sanhita",
+  "bharatiya nyaya sanhita"
+ ],
+ "coverage": "partial",
+ "text_kind": "summary",
+ "source": "curated summary - authentic text at the India Code URL",
+ "india_code_url": "https://www.indiacode.nic.in/handle/123456789/20062",
+ "note": "In force from 1 July 2024. Replaced the Indian Penal Code, 1860. Applies to offences committed on or after that date.",
+ "sections": [
+  {
+   "number": "101",
+   "heading": "Murder",
+   "text": "Culpable homicide amounting to murder. Corresponds to section 300 IPC; punishment provisions follow.",
+   "chapter": null
+  },
+  {
+   "number": "103",
+   "heading": "Punishment for murder",
+   "text": "Death or imprisonment for life, and fine. Corresponds to section 302 IPC.",
+   "chapter": null
+  },
+  {
+   "number": "105",
+   "heading": "Punishment for culpable homicide not amounting to murder",
+   "text": "Corresponds to section 304 IPC.",
+   "chapter": null
+  },
+  {
+   "number": "115",
+   "heading": "Voluntarily causing hurt",
+   "text": "Corresponds to sections 321 and 323 IPC.",
+   "chapter": null
+  },
+  {
+   "number": "117",
+   "heading": "Voluntarily causing grievous hurt",
+   "text": "Corresponds to sections 322 and 325 IPC.",
+   "chapter": null
+  },
+  {
+   "number": "124",
+   "heading": "Causing grievous hurt by acid attack",
+   "text": "Corresponds to section 326A IPC.",
+   "chapter": null
+  },
+  {
+   "number": "303",
+   "heading": "Theft",
+   "text": "Corresponds to sections 378 and 379 IPC.",
+   "chapter": null
+  },
+  {
+   "number": "308",
+   "heading": "Extortion",
+   "text": "Corresponds to sections 383 and 384 IPC.",
+   "chapter": null
+  },
+  {
+   "number": "316",
+   "heading": "Criminal breach of trust",
+   "text": "Corresponds to sections 405 and 406 IPC.",
+   "chapter": null
+  },
+  {
+   "number": "318",
+   "heading": "Cheating and dishonestly inducing delivery of property",
+   "text": "Corresponds to sections 415, 417 and 420 IPC.",
+   "chapter": null
+  },
+  {
+   "number": "324",
+   "heading": "Mischief",
+   "text": "Corresponds to sections 425 and 426 IPC.",
+   "chapter": null
+  },
+  {
+   "number": "329",
+   "heading": "Criminal trespass and house-trespass",
+   "text": "Corresponds to sections 441 and 442 IPC.",
+   "chapter": null
+  },
+  {
+   "number": "351",
+   "heading": "Criminal intimidation",
+   "text": "Corresponds to sections 503 and 506 IPC.",
+   "chapter": null
+  },
+  {
+   "number": "356",
+   "heading": "Defamation",
+   "text": "Corresponds to sections 499 and 500 IPC.",
+   "chapter": null
+  },
+  {
+   "number": "63",
+   "heading": "Rape",
+   "text": "Corresponds to section 375 IPC.",
+   "chapter": null
+  },
+  {
+   "number": "64",
+   "heading": "Punishment for rape",
+   "text": "Corresponds to section 376 IPC.",
+   "chapter": null
+  },
+  {
+   "number": "85",
+   "heading": "Cruelty to a married woman by husband or his relatives",
+   "text": "Corresponds to section 498A IPC.",
+   "chapter": null
+  },
+  {
+   "number": "111",
+   "heading": "Organised crime",
+   "text": "A new offence with no direct IPC equivalent, covering continuing unlawful activity by organised crime syndicates.",
+   "chapter": null
+  },
+  {
+   "number": "113",
+   "heading": "Terrorist act",
+   "text": "A new offence with no direct IPC equivalent.",
+   "chapter": null
+  }
+ ]
+}

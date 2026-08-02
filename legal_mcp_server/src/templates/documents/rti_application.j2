@@ -1,0 +1,56 @@
+To,
+The Public Information Officer
+{{ public_authority }}
+{{ authority_address }}
+
+Date: {{ application_date }}
+
+Sub: Application under the Right to Information Act, 2005
+
+Sir/Madam,
+
+I request the following information under Section 6(1) of the Right to
+Information Act, 2005:
+
+{% for item in information_sought %}
+{{ loop.index }}. {{ item }}
+{% endfor %}
+
+{% if period_covered %}
+The information sought pertains to the period {{ period_covered }}.
+{% endif %}
+
+I am a citizen of India. The prescribed application fee of Rs 10/- is
+{{ fee_mode | default('enclosed by way of Indian Postal Order') }}
+{% if fee_reference %}({{ fee_reference }}){% endif %}.
+
+{% if bpl %}
+I belong to the Below Poverty Line category and am therefore exempt from
+payment of fee under Section 7(5). A copy of my BPL certificate is enclosed.
+{% endif %}
+
+{% if life_and_liberty %}
+This request concerns the life and liberty of a person, and a response is
+therefore sought within forty-eight hours as provided by the proviso to
+Section 7(1).
+{% endif %}
+
+Please provide the information within thirty days as required by Section 7(1).
+If any part of the information is held to be exempt, please specify the
+provision relied upon and provide the remainder in severable form as required
+by Section 10.
+
+I request that the information be furnished in
+{{ delivery_mode | default('printed form by post') }}.
+
+Yours faithfully,
+
+
+{{ applicant_name }}
+{{ applicant_address }}
+{% if applicant_phone %}Tel: {{ applicant_phone }}{% endif %}
+{% if applicant_email %}Email: {{ applicant_email }}{% endif %}
+
+Enclosures:
+1. Proof of payment of application fee
+{% if bpl %}2. BPL certificate{% endif %}
