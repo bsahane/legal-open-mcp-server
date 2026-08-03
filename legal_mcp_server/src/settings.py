@@ -320,13 +320,62 @@ class Settings(BaseSettings):
     # ------------------------------------------------------------------
     # Legal MCP Server settings
     # ------------------------------------------------------------------
+    CASE_LAW_SOURCE: Literal["open_data", "indian_kanoon", "disabled"] = Field(
+        default="open_data",
+        json_schema_extra={
+            "env": "CASE_LAW_SOURCE",
+            "description": (
+                "Case-law backend. 'open_data' (default) queries the free "
+                "AWS Open Data judgment corpus - no API key, no per-query cost. "
+                "'indian_kanoon' uses the paid api.indiankanoon.org and is "
+                "opt-in only. 'disabled' turns case-law tools off."
+            ),
+            "example": "open_data",
+            "enum": ["open_data", "indian_kanoon", "disabled"],
+        },
+    )
+    CASE_LAW_DATA_PATH: str = Field(
+        default="./data/case_law",
+        json_schema_extra={
+            "env": "CASE_LAW_DATA_PATH",
+            "description": (
+                "Local directory for synced judgment metadata and cached PDFs."
+            ),
+            "example": "./data/case_law",
+        },
+    )
+    OPEN_DATA_SC_BUCKET: str = Field(
+        default="indian-supreme-court-judgments",
+        json_schema_extra={
+            "env": "OPEN_DATA_SC_BUCKET",
+            "description": "Public S3 bucket holding Supreme Court judgments",
+            "example": "indian-supreme-court-judgments",
+        },
+    )
+    OPEN_DATA_HC_BUCKET: str = Field(
+        default="indian-high-court-judgments",
+        json_schema_extra={
+            "env": "OPEN_DATA_HC_BUCKET",
+            "description": "Public S3 bucket holding High Court judgments",
+            "example": "indian-high-court-judgments",
+        },
+    )
+    OPEN_DATA_REGION: str = Field(
+        default="ap-south-1",
+        json_schema_extra={
+            "env": "OPEN_DATA_REGION",
+            "description": "AWS region hosting the open judgment buckets",
+            "example": "ap-south-1",
+        },
+    )
     INDIAN_KANOON_API_KEY: Optional[str] = Field(
         default=None,
         json_schema_extra={
             "env": "INDIAN_KANOON_API_KEY",
             "description": (
-                "API token for api.indiankanoon.org. Without it, case-law tools "
-                "return a clear 'source unavailable' status instead of guessing."
+                "Optional paid API token for api.indiankanoon.org. Only used "
+                "when CASE_LAW_SOURCE='indian_kanoon'. Not needed for the "
+                "default free open-data backend."
             ),
             "example": "abcdef1234567890",
             "sensitive": True,
@@ -336,7 +385,7 @@ class Settings(BaseSettings):
         default="https://api.indiankanoon.org",
         json_schema_extra={
             "env": "INDIAN_KANOON_BASE_URL",
-            "description": "Base URL for the Indian Kanoon API",
+            "description": "Base URL for the optional Indian Kanoon API",
             "example": "https://api.indiankanoon.org",
         },
     )
@@ -346,9 +395,9 @@ class Settings(BaseSettings):
         json_schema_extra={
             "env": "INDIAN_KANOON_DAILY_BUDGET_INR",
             "description": (
-                "Hard daily spend cap in INR for Indian Kanoon calls. Search costs "
-                "Rs 0.50, full document Rs 0.20, fragment Rs 0.05. Set 0 to disable "
-                "all paid calls."
+                "Hard daily spend cap in INR, applied only when "
+                "CASE_LAW_SOURCE='indian_kanoon'. Search costs Rs 0.50, full "
+                "document Rs 0.20, fragment Rs 0.05. Set 0 to block paid calls."
             ),
             "example": 100.0,
         },
@@ -492,10 +541,17 @@ class Settings(BaseSettings):
 
     @cached_property
     def case_law_available(self) -> bool:
-        """Whether paid case-law lookups can actually be performed."""
-        return (
-            bool(self.INDIAN_KANOON_API_KEY) and self.INDIAN_KANOON_DAILY_BUDGET_INR > 0
-        )
+        """Whether case-law lookups can be performed at all.
+
+        The default open-data backend needs no key, so it is always considered
+        available; whether any corpus has been synced is a separate, runtime
+        question answered by the open-judgments client itself.
+        """
+        if self.CASE_LAW_SOURCE == "disabled":
+            return False
+        if self.CASE_LAW_SOURCE == "open_data":
+            return True
+        return bool(self.INDIAN_KANOON_API_KEY) and self.INDIAN_KANOON_DAILY_BUDGET_INR > 0
 
     @cached_property
     def semantic_search_available(self) -> bool:
@@ -567,11 +623,17 @@ def validate_legal_config(settings: Settings) -> None:
             "Use 'local' for offline embeddings or 'disabled' for full-text search only."
         )
 
-    if not settings.INDIAN_KANOON_API_KEY:
-        logger.warning(
-            "INDIAN_KANOON_API_KEY is not set - case-law search, judgment retrieval "
-            "and citation verification against case law will report themselves as "
-            "unavailable rather than returning results."
+    if settings.CASE_LAW_SOURCE == "indian_kanoon" and not settings.INDIAN_KANOON_API_KEY:
+        raise ValueError(
+            "CASE_LAW_SOURCE='indian_kanoon' requires INDIAN_KANOON_API_KEY. "
+            "Use the default CASE_LAW_SOURCE='open_data' for free case law "
+            "with no key and no per-query charge."
+        )
+
+    if settings.CASE_LAW_SOURCE == "open_data":
+        logger.info(
+            "Case law uses the free AWS Open Data corpus (CC-BY-4.0). Run the "
+            "'sync_case_law' tool once to download judgment metadata locally."
         )
 
     if settings.EMBEDDING_PROVIDER == "disabled":

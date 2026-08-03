@@ -72,3 +72,10 @@ build.log
 
 # Ingested source documents - these are the user's own case files
 data/documents/
+
+# Synced open-data case-law corpus and cached judgment PDFs. Regenerate with
+# the sync_case_law tool rather than committing it.
+data/case_law/
+
+# Local runtime state (server pid, logs)
+.run/

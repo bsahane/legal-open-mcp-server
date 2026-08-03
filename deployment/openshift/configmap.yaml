@@ -25,8 +25,15 @@ data:
   LEGAL_DATA_PATH: "/app/data"
   DOCUMENT_STORAGE_PATH: "/app/data/documents"
   ENABLE_CITATION_VERIFICATION: "true"
-  # Hard daily cap on Indian Kanoon spend, in INR. Search Rs 0.50, judgment
-  # Rs 0.20, passage Rs 0.05. Set "0" to disable all paid case-law calls.
+  # open_data (free, no key) | indian_kanoon (paid, opt-in) | disabled.
+  CASE_LAW_SOURCE: "open_data"
+  # Synced judgment metadata and cached PDFs. Mount a volume here in production
+  # so the corpus survives pod restarts.
+  CASE_LAW_DATA_PATH: "/app/data/case_law"
+  OPEN_DATA_SC_BUCKET: "indian-supreme-court-judgments"
+  OPEN_DATA_HC_BUCKET: "indian-high-court-judgments"
+  OPEN_DATA_REGION: "ap-south-1"
+  # Applies only when CASE_LAW_SOURCE=indian_kanoon.
   INDIAN_KANOON_DAILY_BUDGET_INR: "100"
   # manual | api | disabled. 'manual' returns portal instructions for a human;
   # the official eCourts portal is CAPTCHA-gated and is never automated.

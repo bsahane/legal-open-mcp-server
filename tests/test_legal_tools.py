@@ -6,6 +6,8 @@ most importantly - a clear distinction between "the source said no" and "the
 source could not be consulted".
 """
 
+from unittest.mock import patch
+
 import pytest
 
 from legal_mcp_server.src.mcp import TOOL_GROUPS, LegalMCPServer
@@ -216,12 +218,20 @@ class TestDeadlineTools:
 
 
 class TestResearchTools:
-    """Case-law tools without an API key configured."""
+    """Case-law tools on the free backend with nothing synced yet."""
 
     @pytest.mark.asyncio
-    async def test_search_without_key_is_unavailable_not_empty(self):
-        """No key must produce 'unavailable', never 'no authority found'."""
-        result = await research_tools.search_case_law("test query")
+    async def test_search_without_corpus_is_unavailable_not_empty(self, tmp_path):
+        """An unsynced corpus must say 'unavailable', never 'no authority found'.
+
+        This is the distinction that stops the model filling a gap from memory.
+        """
+        from legal_mcp_server.src.sources import open_judgments
+
+        client = open_judgments.OpenJudgmentsClient(data_path=str(tmp_path))
+        with patch.object(open_judgments, "get_client", return_value=client):
+            result = await research_tools.search_case_law("test query")
+
         assert result["status"] == "unavailable"
         assert "NOT a finding" in result["message"]
 
@@ -273,11 +283,29 @@ class TestResearchTools:
         result = await research_tools.verify_all_citations("The parties met twice.")
         assert result["citation_count"] == 0
 
-    def test_budget_status_reports_unavailability(self):
-        """Budget status states plainly that case law is unavailable."""
-        result = research_tools.get_research_budget_status()
+    def test_status_reports_unsynced_corpus_plainly(self, tmp_path):
+        """Status must state that nothing is searchable until a sync happens."""
+        from legal_mcp_server.src.sources import open_judgments
+
+        client = open_judgments.OpenJudgmentsClient(data_path=str(tmp_path))
+        with patch.object(open_judgments, "get_client", return_value=client):
+            result = research_tools.case_law_status()
+
         assert result["status"] == "success"
-        assert result["case_law_available"] is False
+        assert result["backend"] == "open_data"
+        assert result["available"] is False
+        assert "sync_case_law" in result["message"]
+
+    def test_status_reports_the_free_cost_model(self, tmp_path):
+        """The active backend must be reported as free, so no one expects a bill."""
+        from legal_mcp_server.src.sources import open_judgments
+
+        client = open_judgments.OpenJudgmentsClient(data_path=str(tmp_path))
+        with patch.object(open_judgments, "get_client", return_value=client):
+            result = research_tools.case_law_status()
+
+        assert "free" in result["cost"]
+        assert "no API key" in result["cost"]
 
 
 class TestDraftingTools:

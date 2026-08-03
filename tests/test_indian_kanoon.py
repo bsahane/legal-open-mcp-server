@@ -1,8 +1,9 @@
-"""Tests for the Indian Kanoon client and the research tools built on it.
+"""Tests for the optional, paid Indian Kanoon client.
 
-Every call to this API is billed, so the spend ledger, the cache and the
-failure modes are as important as the parsing. The HTTP layer is stubbed at
-``_post`` so no request is ever made.
+This backend is opt-in only (``CASE_LAW_SOURCE=indian_kanoon``); the default is
+the free open-data corpus covered by ``test_open_judgments.py``. Every call here
+is billed, so the spend ledger, the cache and the failure modes matter as much
+as the parsing. The HTTP layer is stubbed at ``_post`` so no request is made.
 """
 
 from datetime import date, timedelta
@@ -12,7 +13,6 @@ from unittest.mock import patch
 import pytest
 
 from legal_mcp_server.src.sources import indian_kanoon as ik
-from legal_mcp_server.src.tools import research_tools
 
 SEARCH_PAYLOAD: Dict[str, Any] = {
     "found": "42",
@@ -200,178 +200,6 @@ class TestDocumentParsing:
         assert result["fragments"] == ["one match"]
 
 
-class TestResearchToolsWithStub:
-    """The tool layer over a working client."""
-
-    @pytest.mark.asyncio
-    async def test_search_tool_returns_results(self):
-        """search_case_law surfaces results and the running spend."""
-        client = StubClient(SEARCH_PAYLOAD)
-        with patch(
-            "legal_mcp_server.src.tools.research_tools.get_client", lambda: client
-        ):
-            result = await research_tools.search_case_law("cheque dishonour")
-        assert result["status"] == "success"
-        assert result["result_count"] == 2
-        assert "spend" in result
-
-    @pytest.mark.asyncio
-    async def test_search_tool_rejects_empty_query(self):
-        """An empty query never reaches the paid API."""
-        client = StubClient(SEARCH_PAYLOAD)
-        with patch(
-            "legal_mcp_server.src.tools.research_tools.get_client", lambda: client
-        ):
-            result = await research_tools.search_case_law("   ")
-        assert result["status"] == "error"
-        assert client.calls == []
-
-    @pytest.mark.asyncio
-    async def test_get_judgment_truncates_on_request(self):
-        """Truncation is applied and disclosed."""
-        client = StubClient(DOC_PAYLOAD)
-        with patch(
-            "legal_mcp_server.src.tools.research_tools.get_client", lambda: client
-        ):
-            result = await research_tools.get_judgment(1766147, max_chars=5)
-        assert result["truncated"] is True
-        assert len(result["text"]) == 5
-
-    @pytest.mark.asyncio
-    async def test_get_judgment_rejects_bad_id(self):
-        """A non-positive document id is rejected."""
-        result = await research_tools.get_judgment(0)
-        assert result["status"] == "error"
-
-    @pytest.mark.asyncio
-    async def test_search_within_judgment(self):
-        """Passage search returns the fragments and their count."""
-        client = StubClient({"title": "X", "headline": ["frag one", "frag two"]})
-        with patch(
-            "legal_mcp_server.src.tools.research_tools.get_client", lambda: client
-        ):
-            result = await research_tools.search_within_judgment(1, "jurisdiction")
-        assert result["fragment_count"] == 2
-
-    @pytest.mark.asyncio
-    async def test_empty_fragments_explain_themselves(self):
-        """No match prompts a synonym retry rather than implying silence."""
-        client = StubClient({"title": "X", "headline": []})
-        with patch(
-            "legal_mcp_server.src.tools.research_tools.get_client", lambda: client
-        ):
-            result = await research_tools.search_within_judgment(1, "nothing")
-        assert "synonym" in result["message"]
-
-    @pytest.mark.asyncio
-    async def test_find_citing_cases_warns_about_interpretation(self):
-        """A citing list is not the same as still-good-law, and says so."""
-        client = StubClient(DOC_PAYLOAD)
-        with patch(
-            "legal_mcp_server.src.tools.research_tools.get_client", lambda: client
-        ):
-            result = await research_tools.find_citing_cases(1766147)
-        assert result["cited_by_count"] == 1
-        assert "overrule" in result["message"]
-
-    @pytest.mark.asyncio
-    async def test_case_citation_not_found(self):
-        """A citation with no matching judgment is NOT_FOUND."""
-        client = StubClient({"docs": [], "found": "0"})
-        with patch(
-            "legal_mcp_server.src.tools.research_tools.get_client", lambda: client
-        ):
-            result = await research_tools.verify_citation("(2099) 12 SCC 555")
-        assert result["verdict"] == research_tools.VERDICT_NOT_FOUND
-
-    @pytest.mark.asyncio
-    async def test_case_citation_verified_on_exact_match(self):
-        """A single result containing the citation verifies."""
-        payload = {
-            "found": "1",
-            "docs": [
-                {
-                    "tid": 1,
-                    "title": "Some Case, (2014) 9 SCC 129",
-                    "docsource": "Supreme Court of India",
-                    "publishdate": "2014-08-01",
-                    "headline": "text",
-                }
-            ],
-        }
-        client = StubClient(payload)
-        with patch(
-            "legal_mcp_server.src.tools.research_tools.get_client", lambda: client
-        ):
-            result = await research_tools.verify_citation("(2014) 9 SCC 129")
-        assert result["verdict"] == research_tools.VERDICT_VERIFIED
-
-    @pytest.mark.asyncio
-    async def test_case_citation_ambiguous_on_name_only_match(self):
-        """Results that do not contain the citation are only an approximate match."""
-        client = StubClient(SEARCH_PAYLOAD)
-        with patch(
-            "legal_mcp_server.src.tools.research_tools.get_client", lambda: client
-        ):
-            result = await research_tools.verify_citation("(2014) 9 SCC 129")
-        assert result["verdict"] == research_tools.VERDICT_AMBIGUOUS
-        assert "confirm" in result["note"].lower()
-
-    @pytest.mark.asyncio
-    async def test_verification_disabled_says_so(self):
-        """With verification off, the tool does not imply a citation checks out."""
-        with patch.object(
-            research_tools.settings, "ENABLE_CITATION_VERIFICATION", False
-        ):
-            result = await research_tools.verify_citation("(2014) 9 SCC 129")
-        assert result["verdict"] == research_tools.VERDICT_UNCHECKED
-        assert "no lookup was" in result["note"]
-
-    @pytest.mark.asyncio
-    async def test_sweep_respects_max_citations(self):
-        """Citations beyond the cap are reported as unchecked, not silently dropped."""
-        client = StubClient({"docs": [], "found": "0"})
-        text = "(2014) 9 SCC 129 and (2013) 9 SCC 32 and (2019) 5 SCC 266"
-        with patch(
-            "legal_mcp_server.src.tools.research_tools.get_client", lambda: client
-        ):
-            result = await research_tools.verify_all_citations(text, max_citations=1)
-        assert result["skipped_for_budget"] == 2
-        assert result["citation_count"] == 3
-
-    @pytest.mark.asyncio
-    async def test_build_research_memo_gathers_and_instructs(self):
-        """The memo builder returns an evidence base plus drafting instructions."""
-        client = StubClient(SEARCH_PAYLOAD)
-        with patch(
-            "legal_mcp_server.src.tools.research_tools.get_client", lambda: client
-        ):
-            result = await research_tools.build_research_memo(
-                "Is a post-termination non-compete enforceable?",
-                queries=["section 27 restraint of trade"],
-            )
-        assert result["status"] == "success"
-        assert result["authority_count"] == 2
-        assert "not a memo" in result["message"]
-        assert "verify_all_citations" in result["drafting_instructions"]
-
-    @pytest.mark.asyncio
-    async def test_build_research_memo_rejects_empty_issue(self):
-        """An empty issue is rejected."""
-        result = await research_tools.build_research_memo("")
-        assert result["status"] == "error"
-
-    @pytest.mark.asyncio
-    async def test_budget_status_with_key(self):
-        """With a key configured, case law reports as available."""
-        client = StubClient(SEARCH_PAYLOAD)
-        with patch(
-            "legal_mcp_server.src.tools.research_tools.get_client", lambda: client
-        ):
-            result = research_tools.get_research_budget_status()
-        assert result["case_law_available"] is True
-
-
 class TestClientSingleton:
     """The shared client keeps the cache and ledger effective."""
 
@@ -385,19 +213,3 @@ class TestClientSingleton:
         first = ik.get_client()
         ik.reset_client()
         assert ik.get_client() is not first
-
-
-class TestCourtResolution:
-    """Friendly court names map to Indian Kanoon filter tokens."""
-
-    def test_known_alias(self):
-        """'supreme court' maps to the API's token."""
-        assert research_tools._resolve_court("Supreme Court") == "supremecourt"
-
-    def test_unknown_court_passed_through_lowercased(self):
-        """An unrecognised name is passed through rather than dropped."""
-        assert research_tools._resolve_court("Sikkim") == "sikkim"
-
-    def test_none_stays_none(self):
-        """No filter means no filter."""
-        assert research_tools._resolve_court(None) is None

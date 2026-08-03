@@ -138,10 +138,19 @@ class Citation:
         return f"{self.section} {self.statute}" if self.statute else self.normalized
 
 
-# (2019) 5 SCC 266  |  (1998) 2 Bom CR 461
+# (2019) 5 SCC 266  |  (1998) 2 Bom CR 461  |  [2024] 10 S.C.R. 108
+# Square brackets are the official Supreme Court Reports form used by the
+# e-SCR portal and by the open judgment dataset, so both bracket styles match.
 _RE_BRACKETED_YEAR = re.compile(
-    r"\((?P<year>1[89]\d{2}|20\d{2})\)\s*(?P<volume>\d{1,3})?\s*"
+    r"[\(\[](?P<year>1[89]\d{2}|20\d{2})[\)\]]\s*(?P<volume>\d{1,3})?\s*"
     r"(?P<reporter>[A-Z][A-Za-z.\s()]{1,20}?)\s+(?P<page>\d{1,5})\b"
+)
+
+# 2024INSC735 - the compact neutral citation the Supreme Court stamps on
+# judgments and the open dataset stores in its nc_display field.
+_RE_NEUTRAL_COMPACT = re.compile(
+    r"\b(?P<year>20\d{2})\s*(?P<court>INSC)\s*(?P<number>\d{1,6})\b",
+    re.IGNORECASE,
 )
 
 # AIR 1973 SC 1461  |  2021 SCC OnLine Bom 123  |  2023 INSC 456
@@ -376,6 +385,23 @@ def extract_case_citations(text: str) -> List[Citation]:
                 raw=match.group(0).strip(),
                 kind=CitationKind.CASE,
                 normalized=normalized,
+                year=year,
+                reporter=f"{court} (neutral)",
+                page=number,
+                case_name=_nearest_case_name(text, match.start()),
+                position=match.start(),
+            )
+        )
+
+    for match in _RE_NEUTRAL_COMPACT.finditer(text):
+        year = int(match.group("year"))
+        court = match.group("court").upper()
+        number = match.group("number")
+        add(
+            Citation(
+                raw=match.group(0).strip(),
+                kind=CitationKind.CASE,
+                normalized=f"{year}{court}{number}",
                 year=year,
                 reporter=f"{court} (neutral)",
                 page=number,

@@ -2,47 +2,23 @@
 
 These tools are the server's answer to the single biggest failure mode in
 AI-assisted legal work: a citation that reads perfectly and does not exist.
-Every authority surfaced here comes from a real lookup against Indian Kanoon,
+Every authority surfaced here comes from a real lookup against a real corpus,
 and :func:`verify_all_citations` exists so that any prose - including prose the
 model wrote itself - can be swept before it reaches the user.
+
+The default corpus is the free AWS Open Data release of Indian Supreme Court
+and High Court judgments (CC-BY-4.0): no API key, no per-query cost.
 """
 
 from typing import Any, Dict, List, Optional
 
 from legal_mcp_server.src.domain import citations as cit
 from legal_mcp_server.src.settings import settings
-from legal_mcp_server.src.sources.indian_kanoon import (
-    SourceUnavailable,
-    get_client,
-)
+from legal_mcp_server.src.sources import case_law
+from legal_mcp_server.src.sources.case_law import SourceUnavailable
 from legal_mcp_server.utils.pylogger import get_python_logger
 
 logger = get_python_logger()
-
-# Indian Kanoon court filter tokens, exposed so tool callers use valid values.
-COURT_FILTERS = {
-    "supreme court": "supremecourt",
-    "sc": "supremecourt",
-    "bombay": "bombay",
-    "bombay high court": "bombay",
-    "delhi": "delhi",
-    "delhi high court": "delhi",
-    "kolkata": "kolkata",
-    "chennai": "chennai",
-    "madras": "chennai",
-    "karnataka": "karnataka",
-    "allahabad": "allahabad",
-    "gujarat": "gujarat",
-    "kerala": "kerala",
-    "punjab": "punjab",
-    "rajasthan": "rajasthan",
-    "nclat": "nclat",
-    "ncdrc": "ncdrc",
-    "cat": "cat",
-    "itat": "itat",
-    "tribunals": "tribunals",
-    "high courts": "highcourts",
-}
 
 VERDICT_VERIFIED = "VERIFIED"
 VERDICT_NOT_FOUND = "NOT_FOUND"
@@ -69,42 +45,37 @@ def _unavailable(operation: str, error: Exception) -> Dict[str, Any]:
     }
 
 
-def _resolve_court(court: Optional[str]) -> Optional[str]:
-    """Map a friendly court name to an Indian Kanoon filter token."""
-    if not court:
-        return None
-    return COURT_FILTERS.get(court.strip().lower(), court.strip().lower())
-
-
 async def search_case_law(
     query: str,
     court: Optional[str] = None,
     from_date: Optional[str] = None,
     to_date: Optional[str] = None,
     judge: Optional[str] = None,
+    limit: int = 20,
     page: int = 0,
 ) -> Dict[str, Any]:
-    """Search Indian case law on Indian Kanoon.
+    """Search Indian case law in the free open-access judgment corpus.
 
     TOOL_NAME=search_case_law
     DISPLAY_NAME=Indian Case Law Search
-    USECASE=Find Indian judgments on a legal proposition, from the Supreme Court, any High Court, or tribunals
-    INSTRUCTIONS=1. Phrase the query as the legal proposition, not a natural-language question, 2. Narrow with court and date filters where the forum matters, 3. Read the snippets and fetch promising judgments with get_judgment, 4. Never cite a result you have not opened
-    INPUT_DESCRIPTION=query (string, required): search terms; Indian Kanoon operators work, so quotes force a phrase and AND/OR/NOT combine terms. court (string, optional): "supreme court", "bombay", "delhi", etc. from_date/to_date (string, optional): DD-MM-YYYY bounds. judge (string, optional): judge surname. page (int, optional): zero-based results page.
-    OUTPUT_DESCRIPTION=Dictionary with status, results (doc_id, title, court, date, snippet, url), found count, the query actually sent, and the running Indian Kanoon spend
-    EXAMPLES=search_case_law('"cheque dishonour" AND "section 138" AND territorial jurisdiction', court="bombay"), search_case_law("non-compete clause section 27 Contract Act void", court="supreme court")
-    PREREQUISITES=INDIAN_KANOON_API_KEY must be configured; each search costs Rs 0.50 against the daily budget
-    RELATED_TOOLS=get_judgment to read a result, search_within_judgment to locate a passage, verify_citation to confirm a citation you already have
+    USECASE=Find Indian judgments on a legal proposition, from the Supreme Court or any High Court, at no cost
+    INSTRUCTIONS=1. Check the corpus covers what you need with case_law_status, 2. Search by party name, case title terms or judge - this indexes case metadata, not full judgment text, 3. Open promising results with get_judgment to read the actual reasoning, 4. Never cite a result you have not opened
+    INPUT_DESCRIPTION=query (string, required): search terms; all terms must appear. court (string, optional): "Supreme Court", "Bombay High Court", "Delhi", etc. from_date/to_date (string, optional): YYYY-MM-DD bounds. judge (string, optional): judge name fragment. limit (int, optional, default 20): maximum results.
+    OUTPUT_DESCRIPTION=Dictionary with status, results (doc_id, title, court, date, citation, neutral_citation, judge, disposal, url), the backend used, and a scope note stating what was actually searched
+    EXAMPLES=search_case_law("cheque dishonour", court="Bombay High Court"), search_case_law("Vijay Singh Bihar", court="Supreme Court")
+    PREREQUISITES=Run sync_case_law once for the courts and years you need. No API key and no per-query cost on the default open-data backend.
+    RELATED_TOOLS=sync_case_law to widen coverage, get_judgment to read a result, search_within_judgment to locate a passage, verify_citation to confirm a citation
 
-    I/O-bound operation - uses async def for external API calls.
+    I/O-bound operation - uses async def for external data access.
 
     Args:
-        query: Search terms expressing the legal proposition.
+        query: Search terms expressing the legal proposition or party names.
         court: Optional court filter.
-        from_date: Optional lower date bound, DD-MM-YYYY.
-        to_date: Optional upper date bound, DD-MM-YYYY.
-        judge: Optional authoring-judge filter.
-        page: Zero-based results page.
+        from_date: Optional lower date bound, YYYY-MM-DD.
+        to_date: Optional upper date bound, YYYY-MM-DD.
+        judge: Optional judge filter.
+        limit: Maximum results to return.
+        page: Zero-based results page (paid backend only).
 
     Returns:
         Dict with the ranked results and search metadata.
@@ -113,35 +84,38 @@ async def search_case_law(
         if not query or not query.strip():
             raise ValueError("query must be a non-empty string")
 
-        client = get_client()
-        payload = await client.search(
+        payload = await case_law.search(
             query=query.strip(),
-            page=max(0, page),
-            court=_resolve_court(court),
+            court=court,
             from_date=from_date,
             to_date=to_date,
-            author=judge,
+            judge=judge,
+            limit=limit,
+            page=max(0, page),
         )
 
-        logger.info(
-            f"Case law search returned {len(payload['results'])} results for: {query}"
-        )
+        results = payload["results"]
+        logger.info(f"Case law search returned {len(results)} results for: {query}")
 
-        return {
+        response = {
             "status": "success",
             "operation": "search_case_law",
-            "results": payload["results"],
-            "result_count": len(payload["results"]),
+            "results": results,
+            "result_count": len(results),
             "total_found": payload.get("found"),
-            "query_sent": payload["query"],
-            "page": payload["page"],
-            "spend": client.spend_report(),
+            "query_sent": payload.get("query", query),
+            "backend": payload["backend"],
+            "cost": payload["cost"],
             "message": (
-                f"Found {len(payload['results'])} judgments. Open the relevant ones "
-                "with get_judgment before relying on them; snippets are not a "
+                f"Found {len(results)} judgments. Open the relevant ones with "
+                "get_judgment before relying on them; metadata snippets are not a "
                 "sufficient basis for a citation."
             ),
         }
+        for key in ("attribution", "scope_note", "spend", "page"):
+            if key in payload:
+                response[key] = payload[key]
+        return response
 
     except SourceUnavailable as e:
         logger.warning(f"Case law search unavailable: {e}")
@@ -157,43 +131,38 @@ async def search_case_law(
 
 
 async def get_judgment(
-    doc_id: int, include_citations: bool = True, max_chars: int = 0
+    doc_id: str, include_citations: bool = True, max_chars: int = 0
 ) -> Dict[str, Any]:
-    """Retrieve the full text of a judgment by its Indian Kanoon document id.
+    """Retrieve the full text of a judgment from the official PDF.
 
     TOOL_NAME=get_judgment
     DISPLAY_NAME=Full Judgment Retrieval
-    USECASE=Read a complete judgment, with its authorities-cited and cited-by lists, before relying on it
-    INSTRUCTIONS=1. Obtain a doc_id from search_case_law, 2. Call this tool, 3. Read the holding rather than the headnote, 4. Check cited_by via find_citing_cases if the case is old or the point is contested
-    INPUT_DESCRIPTION=doc_id (int, required): Indian Kanoon document id. include_citations (bool, optional, default True): include the citation graph. max_chars (int, optional, default 0 = whole judgment): truncate very long judgments.
-    OUTPUT_DESCRIPTION=Dictionary with status, doc_id, title, court, date, bench, full text, cites, cited_by, url, and running spend
-    EXAMPLES=get_judgment(1766147), get_judgment(1766147, max_chars=20000)
-    PREREQUISITES=INDIAN_KANOON_API_KEY configured; costs Rs 0.20 per judgment
-    RELATED_TOOLS=search_within_judgment is far cheaper if you only need one passage; find_citing_cases checks whether the case is still good law
+    USECASE=Read a complete judgment before relying on it
+    INSTRUCTIONS=1. Obtain a doc_id from search_case_law, 2. Call this tool, 3. Read the holding rather than the headnote, 4. Quote only what the text actually says
+    INPUT_DESCRIPTION=doc_id (string, required): identifier from search_case_law, e.g. "sc:2024:2024_10_108_125" or "hc:27_1:hcbgoa:2024:HCBM050003922024_1_2024-04-25.pdf". include_citations (bool, optional): reserved. max_chars (int, optional, default 0 = whole judgment): truncate very long judgments.
+    OUTPUT_DESCRIPTION=Dictionary with status, doc_id, title, court, date, bench, full text, citation, neutral_citation, disposal, cnr, url and attribution
+    EXAMPLES=get_judgment("sc:2024:2024_10_108_125"), get_judgment("sc:2024:2024_10_108_125", max_chars=20000)
+    PREREQUISITES=The judgment PDF is downloaded once from public S3 and cached locally. Free on the default open-data backend.
+    RELATED_TOOLS=search_within_judgment to jump to one passage; find_related_proceedings for connected matters
 
-    I/O-bound operation - uses async def for external API calls.
+    I/O-bound operation - uses async def for external data access.
 
     Args:
-        doc_id: Indian Kanoon document id.
-        include_citations: Whether to return the citation graph.
+        doc_id: Judgment identifier returned by search_case_law.
+        include_citations: Reserved; the open corpus has no citation graph.
         max_chars: Optional truncation limit; 0 returns the whole judgment.
 
     Returns:
         Dict with the judgment text and metadata.
     """
     try:
-        if not isinstance(doc_id, int) or doc_id <= 0:
-            raise ValueError("doc_id must be a positive integer")
+        if not doc_id or not str(doc_id).strip():
+            raise ValueError("doc_id must be a non-empty identifier")
 
-        client = get_client()
-        max_edges = 20 if include_citations else 0
-        judgment = await client.get_document(
-            doc_id, max_cites=max_edges, max_cited_by=max_edges
-        )
+        result = await case_law.get_judgment(str(doc_id).strip())
 
-        result = judgment.to_dict()
         truncated = False
-        if max_chars and len(result["text"]) > max_chars:
+        if max_chars and len(result.get("text", "")) > max_chars:
             result["text"] = result["text"][:max_chars]
             truncated = True
 
@@ -202,7 +171,6 @@ async def get_judgment(
             "operation": "get_judgment",
             **result,
             "truncated": truncated,
-            "spend": client.spend_report(),
             "message": (
                 f"Retrieved judgment {doc_id}."
                 + (
@@ -226,46 +194,45 @@ async def get_judgment(
         }
 
 
-async def search_within_judgment(doc_id: int, query: str) -> Dict[str, Any]:
+async def search_within_judgment(doc_id: str, query: str) -> Dict[str, Any]:
     """Find the passages inside one judgment that deal with a specific point.
 
     TOOL_NAME=search_within_judgment
     DISPLAY_NAME=Judgment Passage Finder
-    USECASE=Locate what a specific judgment says about a specific point without paying to download the whole thing
-    INSTRUCTIONS=1. Obtain a doc_id from search_case_law, 2. Pass the point you need, 3. If the fragments settle the question, stop - do not fetch the full judgment
-    INPUT_DESCRIPTION=doc_id (int, required): Indian Kanoon document id. query (string, required): the point to locate, e.g. "territorial jurisdiction" or "burden of proof"
-    OUTPUT_DESCRIPTION=Dictionary with status, doc_id, title, matching fragments, url, and running spend
-    EXAMPLES=search_within_judgment(1766147, "territorial jurisdiction"), search_within_judgment(59736, "presumption under section 139")
-    PREREQUISITES=INDIAN_KANOON_API_KEY configured; costs Rs 0.05, the cheapest case-law call available
-    RELATED_TOOLS=get_judgment when you need the full reasoning; search_case_law to find the doc_id
+    USECASE=Locate what a specific judgment says about a specific point without reading the whole thing
+    INSTRUCTIONS=1. Obtain a doc_id from search_case_law, 2. Pass the point you need, 3. Read the surrounding passage, not just the matched phrase
+    INPUT_DESCRIPTION=doc_id (string, required): identifier from search_case_law. query (string, required): the point to locate, e.g. "territorial jurisdiction" or "burden of proof"
+    OUTPUT_DESCRIPTION=Dictionary with status, doc_id, title, matching passages with character offsets, url and match count
+    EXAMPLES=search_within_judgment("sc:2024:2024_10_108_125", "burden of proof"), search_within_judgment("hc:27_1:hcbgoa:2024:HCBM050003922024_1_2024-04-25.pdf", "jurisdiction")
+    PREREQUISITES=The judgment PDF is cached after the first fetch, so repeat searches are offline and free
+    RELATED_TOOLS=get_judgment for the full reasoning; search_case_law to find the doc_id
 
-    I/O-bound operation - uses async def for external API calls.
+    I/O-bound operation - uses async def for external data access.
 
     Args:
-        doc_id: Indian Kanoon document id.
+        doc_id: Judgment identifier returned by search_case_law.
         query: The proposition or term to locate within the judgment.
 
     Returns:
         Dict with the matching passages.
     """
     try:
-        if not isinstance(doc_id, int) or doc_id <= 0:
-            raise ValueError("doc_id must be a positive integer")
+        if not doc_id or not str(doc_id).strip():
+            raise ValueError("doc_id must be a non-empty identifier")
         if not query or not query.strip():
             raise ValueError("query must be a non-empty string")
 
-        client = get_client()
-        payload = await client.get_fragments(doc_id, query.strip())
+        payload = await case_law.search_within_judgment(
+            str(doc_id).strip(), query.strip()
+        )
 
         return {
             "status": "success",
             "operation": "search_within_judgment",
             **payload,
-            "fragment_count": len(payload["fragments"]),
-            "spend": client.spend_report(),
             "message": (
-                f"Found {len(payload['fragments'])} matching passages."
-                if payload["fragments"]
+                f"Found {payload['match_count']} matching passages."
+                if payload["match_count"]
                 else "No passage in this judgment matched. The judgment may not "
                 "address the point, or the wording may differ - try a synonym "
                 "before concluding it is silent."
@@ -284,101 +251,127 @@ async def search_within_judgment(doc_id: int, query: str) -> Dict[str, Any]:
         }
 
 
-async def find_citing_cases(doc_id: int, limit: int = 20) -> Dict[str, Any]:
-    """List later cases that cite a judgment, to test whether it is still good law.
+async def find_related_proceedings(doc_id: str, limit: int = 20) -> Dict[str, Any]:
+    """Find other proceedings involving the same parties as a judgment.
 
-    TOOL_NAME=find_citing_cases
-    DISPLAY_NAME=Subsequent History Check
-    USECASE=Check whether a judgment has been followed, distinguished, doubted or overruled before you rely on it
-    INSTRUCTIONS=1. Obtain a doc_id, 2. Call this tool, 3. Open any later Supreme Court or larger-bench decision in the list, 4. Report explicitly if the authority appears to have been overtaken
-    INPUT_DESCRIPTION=doc_id (int, required): Indian Kanoon document id. limit (int, optional, default 20): maximum citing cases to return.
-    OUTPUT_DESCRIPTION=Dictionary with status, the judgment being checked, cited_by list, cites list, counts, and a caution about interpreting the result
-    EXAMPLES=find_citing_cases(1766147), find_citing_cases(59736, limit=50)
-    PREREQUISITES=INDIAN_KANOON_API_KEY configured; costs Rs 0.20
-    RELATED_TOOLS=get_judgment for the full text; search_case_law to find later authority directly
+    TOOL_NAME=find_related_proceedings
+    DISPLAY_NAME=Related Proceedings Finder
+    USECASE=Surface appeals, reviews and connected matters involving the same parties
+    INSTRUCTIONS=1. Obtain a doc_id, 2. Call this tool, 3. Read the is_citator flag - when it is False this is a party-name match and tells you NOTHING about whether the judgment is still good law, 4. Say so plainly when reporting
+    INPUT_DESCRIPTION=doc_id (string, required): identifier from search_case_law. limit (int, optional, default 20): maximum results.
+    OUTPUT_DESCRIPTION=Dictionary with status, results, is_citator flag, the party terms matched on, and an explicit note on what the list does and does not establish
+    EXAMPLES=find_related_proceedings("sc:2024:2024_10_108_125"), find_related_proceedings("sc:2024:2024_10_108_125", limit=50)
+    PREREQUISITES=Free on the open-data backend. The open corpus has no citation graph, so this is NOT a citator.
+    RELATED_TOOLS=search_case_law to look for later authority on the point directly; get_judgment to read a result
 
-    I/O-bound operation - uses async def for external API calls.
+    I/O-bound operation - uses async def for external data access.
 
     Args:
-        doc_id: Indian Kanoon document id.
-        limit: Maximum number of citing cases to return.
+        doc_id: Judgment identifier returned by search_case_law.
+        limit: Maximum number of related proceedings to return.
 
     Returns:
-        Dict with the citing and cited lists.
+        Dict with related proceedings and a caveat about their meaning.
     """
     try:
-        if not isinstance(doc_id, int) or doc_id <= 0:
-            raise ValueError("doc_id must be a positive integer")
+        if not doc_id or not str(doc_id).strip():
+            raise ValueError("doc_id must be a non-empty identifier")
 
-        client = get_client()
         bounded = max(1, min(limit, 100))
-        judgment = await client.get_document(
-            doc_id, max_cites=bounded, max_cited_by=bounded
+        payload = await case_law.find_related_proceedings(
+            str(doc_id).strip(), limit=bounded
+        )
+
+        caution = (
+            "A citing case may follow, distinguish, doubt or overrule this "
+            "judgment - the list alone does not tell you which."
+            if payload.get("is_citator")
+            else "This is a party-name match, NOT a citator. It does not establish "
+            "whether this judgment is still good law. To test that, search for "
+            "later authority on the same point and check any subsequent Supreme "
+            "Court or larger-bench decision."
         )
 
         return {
             "status": "success",
-            "operation": "find_citing_cases",
+            "operation": "find_related_proceedings",
             "doc_id": doc_id,
-            "title": judgment.title,
-            "court": judgment.court,
-            "date": judgment.date,
-            "cited_by": judgment.cited_by,
-            "cited_by_count": len(judgment.cited_by),
-            "cites": judgment.citations,
-            "cites_count": len(judgment.citations),
-            "url": judgment.url,
-            "spend": client.spend_report(),
-            "message": (
-                "A citing case may follow, distinguish, doubt or overrule this "
-                "judgment - the list alone does not tell you which. Open the "
-                "significant ones, particularly any later Supreme Court or "
-                "larger-bench decision, before relying on this authority."
-            ),
+            **payload,
+            "result_count": len(payload.get("results", [])),
+            "message": caution,
         }
 
     except SourceUnavailable as e:
-        return _unavailable("find_citing_cases", e)
+        return _unavailable("find_related_proceedings", e)
     except Exception as e:
-        logger.error(f"Error in find_citing_cases: {e}")
+        logger.error(f"Error in find_related_proceedings: {e}")
         return {
             "status": "error",
-            "operation": "find_citing_cases",
+            "operation": "find_related_proceedings",
             "error": str(e),
-            "message": "Failed to retrieve citing cases",
+            "message": "Failed to find related proceedings",
         }
 
 
 async def _verify_case_citation(citation: cit.Citation) -> Dict[str, Any]:
-    """Resolve one case citation against Indian Kanoon."""
-    client = get_client()
-    payload = await client.search(query=citation.search_query(), page=0)
-    results = payload["results"]
+    """Resolve one case citation against the configured case-law corpus.
 
-    if not results:
-        # Retry on the bare citation in case the party names were the problem.
-        if citation.case_name:
-            payload = await client.search(query=citation.normalized, page=0)
-            results = payload["results"]
+    Supreme Court citations are checked against the dataset's official S.C.R.
+    and neutral-citation fields, which is an exact match rather than a text
+    search. Anything else falls back to searching case titles, which is weaker
+    and is reported as such.
+    """
+    exact = await case_law.find_by_citation(citation.normalized)
+    results = exact.get("results", [])
 
-    if not results:
+    if results and exact.get("exact"):
+        if len(results) == 1:
+            return {
+                "verdict": VERDICT_VERIFIED,
+                "matches": results,
+                "note": (
+                    "Citation matches the official citation field for this "
+                    f"judgment in the {exact['backend']} corpus."
+                ),
+            }
+        return {
+            "verdict": VERDICT_AMBIGUOUS,
+            "matches": results[:5],
+            "note": (
+                "More than one judgment carries this citation. Confirm which is "
+                "intended before relying on it."
+            ),
+        }
+
+    # Fall back to searching party names and case titles.
+    query = citation.case_name or citation.search_query() or citation.normalized
+    payload = await case_law.search(query=query, limit=10)
+    candidates = payload.get("results", [])
+
+    if not candidates:
+        synced = ""
+        if payload.get("backend") == "open_data":
+            synced = (
+                " Note this only searched the courts and years synced locally - "
+                "run case_law_status to see coverage, and sync_case_law to widen "
+                "it. A citation outside the synced range is unverified, not false."
+            )
         return {
             "verdict": VERDICT_NOT_FOUND,
             "matches": [],
             "note": (
-                "No judgment on Indian Kanoon matches this citation. Treat it as "
-                "unverified and do not present it as authority."
+                "No judgment in the corpus matches this citation. Treat it as "
+                "unverified and do not present it as authority." + synced
             ),
         }
 
-    # A citation string is distinctive; if the top hit does not contain the
-    # citation or the party names, the match is not safe to assert.
     needle = citation.normalized.lower()
     strong = [
         r
-        for r in results
-        if needle in (r["title"] or "").lower()
-        or needle in (r["snippet"] or "").lower()
+        for r in candidates
+        if needle in (r.get("title") or "").lower()
+        or needle in (r.get("citation") or "").lower()
+        or needle in (r.get("neutral_citation") or "").lower()
     ]
 
     if len(strong) == 1:
@@ -399,10 +392,10 @@ async def _verify_case_citation(citation: cit.Citation) -> Dict[str, Any]:
 
     return {
         "verdict": VERDICT_AMBIGUOUS,
-        "matches": results[:5],
+        "matches": candidates[:5],
         "note": (
-            "Search returned results but none contains the citation itself, so "
-            "the match is by party name only. Open the candidates and confirm."
+            "Candidates share party names but none carries this citation, so the "
+            "citation itself is unconfirmed. Open the candidates and check."
         ),
     }
 
@@ -647,7 +640,7 @@ async def verify_all_citations(text: str, max_citations: int = 25) -> Dict[str, 
             "unverified": problems,
             "all_verified": all_verified,
             "skipped_for_budget": skipped,
-            "spend": get_client().spend_report(),
+            "backend": case_law.active_backend(),
             "message": message,
         }
 
@@ -676,10 +669,10 @@ async def build_research_memo(
     INPUT_DESCRIPTION=issue (string, required): the legal question. queries (list of strings, optional): search phrasings; the issue text is used if omitted. court (string, optional): court filter. max_authorities (int, optional, default 6): cap on judgments gathered.
     OUTPUT_DESCRIPTION=Dictionary with status, the issue, per-query results, a de-duplicated authority list, the citation sweep, cost incurred, and explicit drafting instructions
     EXAMPLES=build_research_memo("Is a post-termination non-compete enforceable against an employee in India?", queries=["section 27 Contract Act restraint of trade employment", "negative covenant post termination employee void"])
-    PREREQUISITES=INDIAN_KANOON_API_KEY configured; each query costs Rs 0.50
+    PREREQUISITES=Run sync_case_law for the relevant courts and years. Free on the default open-data backend.
     RELATED_TOOLS=get_judgment to read an authority in full; verify_all_citations to sweep the memo you write
 
-    I/O-bound operation - uses async def for external API calls.
+    I/O-bound operation - uses async def for external data access.
 
     Args:
         issue: The legal question to research.
@@ -698,15 +691,12 @@ async def build_research_memo(
         if not search_terms:
             search_terms = [issue.strip()]
 
-        client = get_client()
         per_query: List[Dict[str, Any]] = []
-        authorities: Dict[int, Dict[str, Any]] = {}
+        authorities: Dict[str, Dict[str, Any]] = {}
 
         for term in search_terms:
             try:
-                payload = await client.search(
-                    query=term, page=0, court=_resolve_court(court)
-                )
+                payload = await case_law.search(query=term, court=court)
             except SourceUnavailable as e:
                 per_query.append(
                     {"query": term, "status": "unavailable", "error": str(e)}
@@ -740,7 +730,7 @@ async def build_research_memo(
             "authorities": list(authorities.values()),
             "authority_count": len(authorities),
             "statutory_references_in_issue": statutory,
-            "spend": client.spend_report(),
+            "backend": case_law.active_backend(),
             "drafting_instructions": (
                 "Write the memo in this order: ISSUE, SHORT ANSWER, STATUTORY "
                 "FRAMEWORK, AUTHORITIES, ANALYSIS, RISKS AND UNKNOWNS. "
@@ -767,54 +757,124 @@ async def build_research_memo(
         }
 
 
-def get_research_budget_status() -> Dict[str, Any]:
-    """Report today's Indian Kanoon spend against the configured daily cap.
+async def sync_case_law(
+    courts: Optional[List[str]] = None,
+    from_year: int = 2015,
+    to_year: int = 2026,
+    force: bool = False,
+) -> Dict[str, Any]:
+    """Download free judgment metadata so case-law search works offline.
 
-    TOOL_NAME=get_research_budget_status
-    DISPLAY_NAME=Case Law Budget Status
-    USECASE=Check how much of today's paid case-law budget remains before starting a broad research run
-    INSTRUCTIONS=1. Call before a large research task, 2. If remaining budget is low, narrow the queries or use search_within_judgment instead of get_judgment
+    TOOL_NAME=sync_case_law
+    DISPLAY_NAME=Case Law Corpus Sync
+    USECASE=Set up or widen the local free case-law corpus for the courts and years the user actually needs
+    INSTRUCTIONS=1. Run once before first use, 2. Start narrow - the default state High Court plus the Supreme Court for recent years, 3. Widen the year range later if a search comes up empty, 4. Tell the user this downloads tens of MB and takes a minute or two
+    INPUT_DESCRIPTION=courts (list of strings, optional): e.g. ["Supreme Court", "Bombay High Court"]; defaults to the Supreme Court plus the configured default High Court. from_year/to_year (int, optional): inclusive year range, default 2015-2026. force (bool, optional): re-download files already present.
+    OUTPUT_DESCRIPTION=Dictionary with status, per-court file counts, years and benches synced, megabytes downloaded, and the attribution required by the licence
+    EXAMPLES=sync_case_law(), sync_case_law(courts=["Supreme Court"], from_year=2020, to_year=2026), sync_case_law(courts=["Bombay High Court", "Delhi"], from_year=2023, to_year=2026)
+    PREREQUISITES=Internet access. No API key, no account, no charge - the data is public and CC-BY-4.0.
+    RELATED_TOOLS=case_law_status to see current coverage; search_case_law to query what was synced
+
+    I/O-bound operation - uses async def for external data access.
+
+    Args:
+        courts: Courts to sync. Defaults to Supreme Court plus the configured
+            default High Court.
+        from_year: First year to sync, inclusive.
+        to_year: Last year to sync, inclusive.
+        force: Re-download files that already exist locally.
+
+    Returns:
+        Dict summarising what was downloaded.
+    """
+    try:
+        from legal_mcp_server.src.sources import open_judgments
+
+        if case_law.active_backend() != "open_data":
+            return {
+                "status": "error",
+                "operation": "sync_case_law",
+                "error": f"CASE_LAW_SOURCE is '{case_law.active_backend()}'",
+                "message": (
+                    "Syncing only applies to the free open-data backend. Set "
+                    "CASE_LAW_SOURCE=open_data to use it."
+                ),
+            }
+
+        targets = [c for c in (courts or []) if c and c.strip()]
+        if not targets:
+            targets = ["Supreme Court", f"{settings.DEFAULT_HIGH_COURT} High Court"]
+
+        client = open_judgments.get_client()
+        summary = await client.sync(
+            courts=targets,
+            from_year=int(from_year),
+            to_year=int(to_year),
+            force=bool(force),
+        )
+
+        logger.info(
+            f"Synced case law: {summary['files']} files, {summary['megabytes']} MB"
+        )
+
+        return {
+            "status": "success",
+            "operation": "sync_case_law",
+            **summary,
+            "message": (
+                f"Downloaded {summary['files']} metadata files "
+                f"({summary['megabytes']} MB) covering {from_year}-{to_year}. "
+                f"{summary['skipped']} already present. Search is now local, "
+                "offline and free. Judgment PDFs are fetched individually on "
+                "demand when you open one."
+            ),
+        }
+
+    except open_judgments.SourceUnavailable as e:
+        return _unavailable("sync_case_law", e)
+    except Exception as e:
+        logger.error(f"Error in sync_case_law: {e}")
+        return {
+            "status": "error",
+            "operation": "sync_case_law",
+            "error": str(e),
+            "message": "Failed to sync case law corpus",
+        }
+
+
+def case_law_status() -> Dict[str, Any]:
+    """Report which case-law backend is active and what it currently covers.
+
+    TOOL_NAME=case_law_status
+    DISPLAY_NAME=Case Law Source Status
+    USECASE=Check before researching whether case law is available and which courts and years are actually searchable
+    INSTRUCTIONS=1. Call before a research task, 2. If the corpus is not synced or the years needed are missing, run sync_case_law, 3. Never treat an empty search over an unsynced range as proof that no authority exists
     INPUT_DESCRIPTION=No parameters
-    OUTPUT_DESCRIPTION=Dictionary with status, whether case law is available at all, today's spend and call count, the configured cap, remaining budget, and per-call prices
-    EXAMPLES=get_research_budget_status()
+    OUTPUT_DESCRIPTION=Dictionary with status, the active backend, whether it is usable, the courts and years synced, cached PDF count, and the cost model
+    EXAMPLES=case_law_status()
     PREREQUISITES=None
-    RELATED_TOOLS=search_case_law, get_judgment and search_within_judgment all draw on this budget
+    RELATED_TOOLS=sync_case_law to widen coverage; search_case_law to query it
 
     CPU-bound operation - uses def for local state inspection.
 
     Returns:
-        Dict describing the current spend position.
+        Dict describing the active backend and its coverage.
     """
     try:
-        client = get_client()
+        report = case_law.status()
         return {
             "status": "success",
-            "operation": "get_research_budget_status",
-            "case_law_available": client.available,
-            "api_key_configured": bool(settings.INDIAN_KANOON_API_KEY),
+            "operation": "case_law_status",
             "citation_verification_enabled": settings.ENABLE_CITATION_VERIFICATION,
-            **client.spend_report(),
-            "prices_inr": {
-                "search": 0.50,
-                "full_judgment": 0.20,
-                "judgment_metadata": 0.05,
-                "passage_search": 0.05,
-            },
-            "message": (
-                "Case law is available."
-                if client.available
-                else "Case law is NOT available - INDIAN_KANOON_API_KEY is missing "
-                "or the daily budget is zero. Say so rather than answering from "
-                "recalled case law."
-            ),
+            **report,
         }
     except Exception as e:
-        logger.error(f"Error in get_research_budget_status: {e}")
+        logger.error(f"Error in case_law_status: {e}")
         return {
             "status": "error",
-            "operation": "get_research_budget_status",
+            "operation": "case_law_status",
             "error": str(e),
-            "message": "Failed to read budget status",
+            "message": "Failed to read case law status",
         }
 
 
@@ -822,9 +882,10 @@ TOOLS: List[Any] = [
     search_case_law,
     get_judgment,
     search_within_judgment,
-    find_citing_cases,
+    find_related_proceedings,
     verify_citation,
     verify_all_citations,
     build_research_memo,
-    get_research_budget_status,
+    sync_case_law,
+    case_law_status,
 ]

@@ -22,41 +22,60 @@ answers with different consequences.
 
 ## Research and citations
 
+Case law comes from the **free** AWS Open Data release of Indian judgments
+(CC-BY-4.0): Supreme Court from 1950 with official S.C.R. and neutral
+citations, plus 25 High Courts / 45 benches. No API key, no per-query charge.
+
+`sync_case_law` downloads Parquet metadata locally; searches then run offline
+through DuckDB. Judgment PDFs are pulled from public S3 on demand and cached.
+
+### `sync_case_law`
+Downloads metadata for given `courts` and a `from_year`/`to_year` range.
+Defaults to the Supreme Court plus the configured default High Court, 2015-2026.
+Tens of MB per court-year. Run once, then widen when a search comes up empty.
+
+### `case_law_status`
+Which backend is active, whether it is usable, and exactly which courts and
+years are searchable. Check this before treating an empty search as meaningful.
+
 ### `search_case_law`
-Search Indian Kanoon. Filters: `court`, `from_date`, `to_date`, `judge`, `page`.
-Costs ₹0.50. Returns doc ids, courts, dates, snippets, and the running spend.
+Filters: `court`, `from_date`, `to_date`, `judge`, `limit`. Searches case
+**metadata** — party names, case titles, judges, short descriptions — not the
+full text of every judgment. The response carries a `scope_note` saying so, so
+an empty result is never mistaken for "no such authority exists".
 
 ### `get_judgment`
-Full judgment by doc id, with the citation graph. Costs ₹0.20. `max_chars`
-truncates and discloses the truncation.
+Full judgment text, extracted from the official PDF. `max_chars` truncates and
+discloses the truncation. Scanned judgments with no extractable text say that
+plainly rather than returning an empty string.
 
 ### `search_within_judgment`
-Passages inside one judgment matching a query. Costs ₹0.05 — the cheapest
-call. Prefer it over `get_judgment` when the question is "where does this
-judgment say X".
+Passages inside one judgment matching a query, with character offsets. Runs
+against the cached PDF text, so it is offline and free after the first fetch.
 
-### `find_citing_cases`
-Later cases citing a judgment. The response states explicitly that a citing
-list does not tell you whether the case was followed, distinguished, doubted or
-overruled.
+### `find_related_proceedings`
+Other proceedings sharing the judgment's party names — appeals, reviews,
+connected matters. **This is not a citator.** The open corpus has no citation
+graph, and the response sets `is_citator: false` and says outright that it does
+not establish whether the judgment is still good law.
 
 ### `verify_citation`
-Resolves one citation. Case citations go to Indian Kanoon (₹0.50); statutory
-citations resolve offline against the bundled corpus (free). Verdicts:
-`VERIFIED`, `NOT_FOUND`, `AMBIGUOUS`, `UNCHECKED`.
+Resolves one citation. Supreme Court citations are matched against the dataset's
+official `citation` and neutral-citation fields — an exact match, not a text
+search — so `[2024] 10 S.C.R. 108` and `2024INSC735` both resolve. Statutory
+citations resolve offline against the bundled corpus. Verdicts: `VERIFIED`,
+`NOT_FOUND`, `AMBIGUOUS`, `UNCHECKED`. A `NOT_FOUND` explicitly notes that only
+synced years were searched.
 
 ### `verify_all_citations`
-Extracts and verifies every citation in a block of prose. `max_citations` caps
-paid checks; anything skipped is returned as `UNCHECKED`, never dropped. Run
-this over every memo and draft before presenting it.
+Extracts and verifies every citation in a block of prose. Anything skipped is
+returned as `UNCHECKED`, never dropped. Run this over every memo and draft
+before presenting it.
 
 ### `build_research_memo`
 Gathers and de-duplicates authorities across several search phrasings and
 returns them with drafting instructions. It assembles an evidence base; it does
 not write the analysis.
-
-### `get_research_budget_status`
-Today's spend against the cap, and whether case law is available at all.
 
 ---
 

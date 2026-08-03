@@ -26,9 +26,9 @@ that is not a rough edge — it is the whole risk.
 So the design rule throughout is: **the server distinguishes what it knows from
 what it does not, and never closes the gap on its own.**
 
-- Case law comes from a real lookup against Indian Kanoon, or the tool reports
+- Case law comes from a real lookup against a real corpus, or the tool reports
   `unavailable`. "The source could not be consulted" is never rendered as "no
-  authority exists".
+  authority exists" - and an empty result over an unsynced year range says so.
 - `verify_all_citations` sweeps any draft or memo and marks every citation
   `VERIFIED`, `NOT_FOUND`, `AMBIGUOUS` or `UNCHECKED`. Nothing is quietly
   dropped or reworded.
@@ -44,15 +44,27 @@ what it does not, and never closes the gap on its own.**
 
 ## What it does
 
-**39 tools in seven groups.**
+**40 tools in seven groups.**
 
 ### Research and citations
 `search_case_law` · `get_judgment` · `search_within_judgment` ·
-`find_citing_cases` · `verify_citation` · `verify_all_citations` ·
-`build_research_memo` · `get_research_budget_status`
+`find_related_proceedings` · `verify_citation` · `verify_all_citations` ·
+`build_research_memo` · `sync_case_law` · `case_law_status`
 
-Indian Kanoon's ~30M judgments, with a per-day spend cap and response caching so
-a research loop cannot run up a bill.
+**Free case law, no API key.** Backed by the [AWS Open Data][awsod] release of
+Indian judgments (CC-BY-4.0): the Supreme Court from 1950 with official S.C.R.
+and neutral citations, plus 25 High Courts / 45 benches (~17.8M judgments).
+
+`sync_case_law` downloads the Parquet *metadata* for the courts and years you
+care about - tens of MB, not the 1.25 TiB of PDFs - and search then runs locally
+through DuckDB: instant, offline, unlimited, free. Judgment PDFs are fetched
+individually from public S3 only when you open one, and cached.
+
+Because the Supreme Court dataset carries real citation fields,
+`verify_citation` matches `[2024] 10 S.C.R. 108` and `2024INSC735` against the
+official record rather than guessing from a text search.
+
+[awsod]: https://registry.opendata.aws/indian-supreme-court-judgments/
 
 ### Statutes and the new criminal codes
 `get_section` · `search_statute` · `map_criminal_code_section` ·
@@ -126,6 +138,13 @@ Set `ENABLE_AUTH=False` in `.env` for local use, then:
 make local
 ```
 
+Download the free case-law corpus for the courts and years you need (one time,
+no API key, no charge). From your MCP client:
+
+> Run sync_case_law for the Supreme Court and Bombay High Court, 2015 to 2026.
+
+Check what is covered any time with `case_law_status`.
+
 Register it with Claude Code:
 
 ```bash
@@ -139,7 +158,7 @@ API key and no database.
 
 | Capability | Needs | Without it |
 |---|---|---|
-| Case law + case-citation verification | `INDIAN_KANOON_API_KEY` ([₹500 free credit](https://api.indiankanoon.org/)) | Tools report `unavailable` |
+| Case law + case-citation verification | Nothing - run `sync_case_law` once (free, no key) | Tools report `unavailable` until synced |
 | Matters, hearings, documents | PostgreSQL (`podman compose up postgres`) | Tools report `unavailable` |
 | Semantic document search | `EMBEDDING_PROVIDER=voyage` + `VOYAGE_API_KEY`, or `=local` | Full-text search only |
 | Automated case status | A licensed provider key + `ECOURTS_ADAPTER=api` | Portal instructions for you to follow |
@@ -201,8 +220,9 @@ change behaviour most:
 
 | Variable | Default | Effect |
 |---|---|---|
-| `INDIAN_KANOON_API_KEY` | unset | Enables case law. Without it those tools report `unavailable`. |
-| `INDIAN_KANOON_DAILY_BUDGET_INR` | `100` | Hard daily spend cap. `0` disables all paid calls. |
+| `CASE_LAW_SOURCE` | `open_data` | `open_data` (free, no key) \| `indian_kanoon` (paid, opt-in) \| `disabled` |
+| `CASE_LAW_DATA_PATH` | `./data/case_law` | Synced judgment metadata and cached PDFs |
+| `INDIAN_KANOON_API_KEY` | unset | Only needed if you opt into the paid backend |
 | `ENABLE_CITATION_VERIFICATION` | `True` | Leave on. Off means citations are not checked, and the tools say so. |
 | `EMBEDDING_PROVIDER` | `disabled` | `voyage` \| `local` \| `disabled` |
 | `ECOURTS_ADAPTER` | `manual` | `manual` \| `api` \| `disabled` |
@@ -268,7 +288,10 @@ deployment, authentication and CI/CD.
 ## Sources
 
 - [redhat-data-and-ai/template-mcp-server](https://github.com/redhat-data-and-ai/template-mcp-server) — Apache 2.0
-- [Indian Kanoon API](https://api.indiankanoon.org/) · [pricing](https://api.indiankanoon.org/pricing/)
+- [Indian Supreme Court Judgments](https://registry.opendata.aws/indian-supreme-court-judgments/) ·
+  [Indian High Court Judgments](https://registry.opendata.aws/indian-high-court-judgments/) -
+  AWS Open Data, CC-BY-4.0, maintained by Dattam Labs. **The default case-law source.**
+- [Indian Kanoon API](https://api.indiankanoon.org/) - optional paid alternative, not used by default
 - [India Code](https://www.indiacode.nic.in/) — authentic bare Act text
 - [civictech-India/Indian-Law-Penal-Code-Json](https://github.com/civictech-India/Indian-Law-Penal-Code-Json) — the open corpus `make corpus` fetches
 - [eCourts Services](https://services.ecourts.gov.in/ecourtindia_v6/)

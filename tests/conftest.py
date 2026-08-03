@@ -4,6 +4,18 @@ from unittest.mock import Mock, patch
 
 import pytest
 
+# Fully load duckdb before anything patches sys.modules. duckdb pulls in its
+# native ``_duckdb`` extension and several submodules lazily; if that first
+# import happens while ``mock_imports`` below has sys.modules patched,
+# ``patch.dict`` drops the newly registered ``_duckdb`` entry on exit and later
+# attribute access dies with "'_duckdb' is not a package". Importing eagerly
+# here means it is already cached in the real sys.modules.
+try:  # pragma: no cover - environment dependent
+    import duckdb  # noqa: F401
+    import duckdb.sqltypes  # noqa: F401
+except Exception:  # pragma: no cover - duckdb is optional at import time
+    pass
+
 
 @pytest.fixture
 def mock_settings():
