@@ -52,7 +52,7 @@ dependencies = [
 [project.optional-dependencies]
 # Embedding backends are optional: without either, hybrid search degrades to
 # Postgres full-text only (EMBEDDING_PROVIDER=disabled).
-voyage = ["voyageai==0.3.2"]
+voyage = ["voyageai==0.5.0"]
 local = ["fastembed==0.4.2"]
 dev = [
     "pytest==8.4.1",
