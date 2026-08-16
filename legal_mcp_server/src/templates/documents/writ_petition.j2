@@ -1,0 +1,58 @@
+{{ t('in_the_high_court', language) | replace('{{ court_place }}', court_place or 'BOMBAY') }}
+{{ t('appellate_jurisdiction', language) | replace('{{ jurisdiction_type }}', jurisdiction_type | default('CIVIL')) }}
+
+BETWEEN
+
+{{ petitioner_name }}
+{{ petitioner_address }}
+
+... Petitioner(s) / Appellant(s)
+
+AND
+
+{{ respondent_name }}
+{{ respondent_address }}
+
+... Respondent(s) / Opposite Party(s)
+
+WRIT PETITION NO. {{ petition_number }} OF {{ year }}
+
+UNDER ARTICLES 226 AND 227 OF THE CONSTITUTION OF INDIA
+
+TO,
+THE HON'BLE THE CHIEF JUSTICE
+AND THE HON'BLE JUDGES
+OF THE {{ court_place }} HIGH COURT
+
+MOST RESPECTFULLY SHOWETH:
+
+{{ t('the_facts_are_as_under', language) }}
+
+{% for fact in facts %}
+{{ loop.index }}. {{ fact }}
+{% endfor %}
+
+{{ t('grounds_for_relief', language) }}
+
+{% for ground in grounds %}
+{{ loop.index }}. {{ ground }}
+{% endfor %}
+
+PRAYER
+
+{{ t('prays_relief', language) }}
+
+{% for item in reliefs %}
+{{ loop.index }}. {{ item }}
+{% endfor %}
+
+{{ t('and_pass_such_other', language) }}
+
+PLACE: {{ place }}
+DATE: {{ filing_date }}
+
+_________________________
+{{ petitioner_name }}
+Petitioner in person /
+Through Counsel: {{ advocate_name }}
+Advocate for the Petitioner

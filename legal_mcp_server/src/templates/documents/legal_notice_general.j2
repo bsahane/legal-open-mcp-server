@@ -3,37 +3,37 @@
 {% if sender_phone %}Tel: {{ sender_phone }}{% endif %}
 {% if sender_email %}Email: {{ sender_email }}{% endif %}
 
-Ref: {{ reference | default('NIL') }}
-Date: {{ notice_date }}
+{{ t('ref', language) }} {{ reference | default('NIL') }}
+{{ t('date_label', language) }} {{ notice_date }}
 
-BY REGISTERED POST A.D.{% if send_by_email %} AND BY EMAIL{% endif %}
+{{ t('registered_post_ad', language) }}{% if send_by_email %} {{ t('and_by_email', language) }}{% endif %}
 
-To,
+{{ t('to', language) }},
 {{ recipient_name }}
 {{ recipient_address }}
 
-Sub: {{ subject }}
+{{ t('sub', language) }} {{ subject }}
 
-Sir/Madam,
+{{ t('dear_sir_madam', language) }}
 
-Under instructions from and on behalf of my client {{ client_name }},
-{{ client_address }} (hereinafter "my client"), I address you as under:
+{{ t('under_instructions', language) }} {{ client_name }},
+{{ client_address }} {{ t('hereinafter_client', language) }}
 
 {% for fact in facts %}
 {{ loop.index }}. That {{ fact }}
 {% endfor %}
 
 {{ facts | length + 1 }}. That your aforesaid acts and omissions constitute
-   {{ legal_basis }}, and my client has suffered loss and injury thereby.
+    {{ legal_basis }}, and my client has suffered loss and injury thereby.
 
 {{ facts | length + 2 }}. That my client has been constrained to issue this
-   notice on account of your failure to redress the grievance despite
-   {{ prior_attempts | default('repeated requests') }}.
+    notice on account of your failure to redress the grievance despite
+    {{ prior_attempts | default('repeated requests') }}.
 
 I therefore call upon you, through this notice, to:
 
 {% for demand in demands %}
-   ({{ loop.index }}) {{ demand }};
+    ({{ loop.index }}) {{ demand }};
 {% endfor %}
 
 within {{ compliance_days }} days from the date of receipt of this notice.
@@ -45,10 +45,10 @@ notice shall be relied upon as evidence of your knowledge and default.
 
 A copy of this notice is retained in my office for further necessary action.
 
-Yours faithfully,
+{{ t('yours_faithfully', language) }}
 
 
 {{ advocate_name | default(sender_name) }}
 {% if advocate_enrolment %}Advocate, Enrolment No. {{ advocate_enrolment }}{% endif %}
 
-Copy to: My client, {{ client_name }}, for record.
+{{ t('copy_to_client', language) }}

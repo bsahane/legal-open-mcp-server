@@ -373,6 +373,182 @@ class TestDraftingTools:
         issues = " ".join(i["issue"] for i in result["issues"])
         assert "verification" in issues.lower()
 
+    def test_draft_document_defaults_to_english(self):
+        """With no language, a template renders in English."""
+        result = drafting_tools.draft_document(
+            "rti_application",
+            {
+                "public_authority": "Municipal Corporation of Greater Mumbai",
+                "authority_address": "Fort, Mumbai 400001",
+                "application_date": "2026-08-02",
+                "information_sought": ["Copy of the building plan for CTS 123"],
+                "applicant_name": "B Sahane",
+                "applicant_address": "Andheri, Mumbai",
+            },
+        )
+        assert result["status"] == "success"
+        assert result["language"] == "en"
+
+    def test_draft_document_accepts_language(self):
+        """A supported language renders the static text translated."""
+        result = drafting_tools.draft_document(
+            "ni_138_notice",
+            {
+                "sender_name": "F",
+                "sender_address": "M",
+                "notice_date": "2026-08-16",
+                "recipient_name": "E",
+                "recipient_address": "A",
+                "client_name": "F",
+                "client_address": "B",
+                "liability_description": "goods",
+                "cheque_number": "1",
+                "cheque_date": "2026-06-01",
+                "cheque_amount": 200000,
+                "amount_in_words": "Two Lakh Only",
+                "drawee_bank": "SBI",
+                "drawee_branch": "Andheri",
+                "payee_bank": "HDFC",
+                "payee_branch": "Fort",
+                "presentation_date": "2026-06-02",
+                "dishonour_reason": "Insufficient Funds",
+                "dishonour_memo_date": "2026-06-03",
+                "dishonour_date": "2026-06-03",
+            },
+            language="hi",
+        )
+        assert result["status"] == "success"
+        assert result["language"] == "hi"
+        assert any("\u0900" <= ch <= "\u097F" for ch in result["draft"])
+
+    def test_draft_document_rejects_unsupported_language(self):
+        """A language a template does not support is refused, not silently
+        ignored."""
+        result = drafting_tools.draft_document(
+            "ni_138_notice",
+            {"sender_name": "X"},
+            language="ta",
+        )
+        assert result["status"] == "unsupported_language"
+        assert result["supported_languages"] == ["en", "hi"]
+
+    def test_get_document_languages(self):
+        """The supported languages of a template are reported."""
+        result = drafting_tools.get_document_languages("writ_petition")
+        assert result["status"] == "success"
+        assert "en" in result["languages"]
+        assert "hi" in result["languages"]
+
+    def test_translate_document_is_rule_based(self):
+        """Known static clauses are translated, user values preserved."""
+        result = drafting_tools.draft_document(
+            "ni_138_notice",
+            {
+                "sender_name": "F",
+                "sender_address": "M",
+                "notice_date": "2026-08-16",
+                "recipient_name": "E",
+                "recipient_address": "A",
+                "client_name": "F",
+                "client_address": "B",
+                "liability_description": "goods",
+                "cheque_number": "1",
+                "cheque_date": "2026-06-01",
+                "cheque_amount": 200000,
+                "amount_in_words": "Two Lakh Only",
+                "drawee_bank": "SBI",
+                "drawee_branch": "Andheri",
+                "payee_bank": "HDFC",
+                "payee_branch": "Fort",
+                "presentation_date": "2026-06-02",
+                "dishonour_reason": "Insufficient Funds",
+                "dishonour_memo_date": "2026-06-03",
+                "dishonour_date": "2026-06-03",
+            },
+        )
+        translated = drafting_tools.translate_document(
+            result["draft"], target_language="hi"
+        )
+        assert translated["status"] == "success"
+        assert translated["sentences_translated"] > 0
+        assert any(
+            "\u0900" <= ch <= "\u097F" for ch in translated["translated_draft"]
+        )
+        # user-supplied facts survive verbatim
+        assert "SBI" in translated["translated_draft"]
+
+    def test_translate_document_same_language_returns_unchanged(self):
+        """Translating into the source language is a no-op."""
+        result = drafting_tools.translate_document("Some draft text.", target_language="en")
+        assert result["status"] == "success"
+        assert result["translated_draft"] == "Some draft text."
+
+    def test_new_court_templates_render(self):
+        """The court-format templates render fully with no Jinja leftovers."""
+        for key, params in [
+            (
+                "writ_petition",
+                {
+                    "court_place": "BOMBAY",
+                    "petitioner_name": "A",
+                    "petitioner_address": "Mumbai",
+                    "respondent_name": "State",
+                    "respondent_address": "Mumbai",
+                    "petition_number": "1",
+                    "year": "2026",
+                    "facts": ["Fact"],
+                    "grounds": ["Ground"],
+                    "reliefs": ["Relief"],
+                    "filing_date": "2026-08-16",
+                    "advocate_name": "X",
+                },
+            ),
+            (
+                "civil_appeal",
+                {
+                    "court_place": "BOMBAY",
+                    "appellant_name": "A",
+                    "appellant_address": "Mumbai",
+                    "respondent_name": "B",
+                    "respondent_address": "Mumbai",
+                    "appeal_number": "1",
+                    "year": "2026",
+                    "impugned_date": "2026-01-01",
+                    "lower_court": "District Court",
+                    "lower_court_place": "Thane",
+                    "lower_court_case_no": "CS 1/2025",
+                    "facts": ["Fact"],
+                    "grounds": ["Ground"],
+                    "filing_date": "2026-08-16",
+                    "advocate_name": "X",
+                },
+            ),
+            (
+                "slp",
+                {
+                    "petitioner_name": "A",
+                    "petitioner_address": "Delhi",
+                    "respondent_name": "Union of India",
+                    "respondent_address": "New Delhi",
+                    "petition_number": "1",
+                    "year": "2026",
+                    "impugned_date": "2026-01-01",
+                    "impugned_court": "High Court of Bombay",
+                    "impugned_court_place": "Mumbai",
+                    "impugned_court_case_no": "WP 1/2025",
+                    "impugned_disposal": "Dismissed",
+                    "facts": ["Fact"],
+                    "grounds": ["Ground"],
+                    "filing_date": "2026-08-16",
+                    "advocate_name": "X",
+                },
+            ),
+        ]:
+            result = drafting_tools.draft_document(key, params)
+            assert result["status"] == "success", key
+            assert "{{" not in result["draft"], key
+            assert result["checklist"], key
+
 
 class TestDocumentTools:
     """Chunking and offline contract review."""

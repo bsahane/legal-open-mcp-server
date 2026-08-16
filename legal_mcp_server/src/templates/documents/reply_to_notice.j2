@@ -1,22 +1,21 @@
 {{ sender_name | upper }}
 {{ sender_address }}
 
-Ref: {{ reference | default('NIL') }}
-Date: {{ reply_date }}
+{{ t('ref', language) }} {{ reference | default('NIL') }}
+{{ t('date_label', language) }} {{ reply_date }}
 
-BY REGISTERED POST A.D.
+{{ t('registered_post_ad', language) }}
 
-To,
+{{ t('to', language) }},
 {{ recipient_name }}
 {{ recipient_address }}
 
-Sub: Reply to your notice dated {{ original_notice_date }}
-     {% if original_reference %}(Ref: {{ original_reference }}){% endif %}
+{{ t('sub', language) }} {{ t('reply_to_notice_subject', language) | replace('{{ original_notice_date }}', original_notice_date) }}{% if original_reference %} ({{ t('ref', language) }} {{ original_reference }}){% endif %}
 
-Sir/Madam,
+{{ t('dear_sir_madam', language) }}
 
-Under instructions from and on behalf of my client {{ client_name }},
-{{ client_address }}, I reply to your notice dated {{ original_notice_date }}
+{{ t('under_instructions', language) }} {{ client_name }},
+{{ client_address }}, {{ t('reply_to_notice_intro', language) }} {{ original_notice_date }}
 (hereinafter "the said notice") as under:
 
 1. That the contents of the said notice are denied in their entirety save to
@@ -29,24 +28,24 @@ Under instructions from and on behalf of my client {{ client_name }},
 {% endfor %}
 
 {{ paragraph_responses | length + 2 }}. That the true and correct facts are as
-   follows:
+    follows:
 {% for fact in true_facts %}
-   ({{ "abcdefghij"[loop.index0] }}) {{ fact }};
+    ({{ "abcdefghij"[loop.index0] }}) {{ fact }};
 {% endfor %}
 
 {% if legal_defences %}
 {{ paragraph_responses | length + 3 }}. That, without prejudice, my client
-   raises the following contentions in law:
+    raises the following contentions in law:
 {% for defence in legal_defences %}
-   ({{ "abcdefghij"[loop.index0] }}) {{ defence }};
+    ({{ "abcdefghij"[loop.index0] }}) {{ defence }};
 {% endfor %}
 {% endif %}
 
 {% if counter_demands %}
 {{ paragraph_responses | length + (4 if legal_defences else 3) }}. That my
-   client, on the contrary, calls upon you to:
+    client, on the contrary, calls upon you to:
 {% for demand in counter_demands %}
-   ({{ "abcdefghij"[loop.index0] }}) {{ demand }};
+    ({{ "abcdefghij"[loop.index0] }}) {{ demand }};
 {% endfor %}
 {% endif %}
 
@@ -58,10 +57,10 @@ proceedings for the costs and consequences of the said notice.
 This reply is issued without prejudice to my client's rights and contentions,
 all of which are expressly reserved.
 
-Yours faithfully,
+{{ t('yours_faithfully', language) }}
 
 
 {{ advocate_name | default(sender_name) }}
 {% if advocate_enrolment %}Advocate, Enrolment No. {{ advocate_enrolment }}{% endif %}
 
-Copy to: My client, {{ client_name }}, for record.
+{{ t('copy_to_client', language) }}

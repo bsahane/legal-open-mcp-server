@@ -95,6 +95,11 @@ TOOL_ANNOTATIONS: Dict[str, Dict[str, Any]] = {
     "list_templates": {"title": "List document templates", "readOnlyHint": True},
     "draft_document": {"title": "Draft a document", "readOnlyHint": True},
     "review_draft": {"title": "Review a draft", "readOnlyHint": True},
+    "get_document_languages": {
+        "title": "Get document languages",
+        "readOnlyHint": True,
+    },
+    "translate_document": {"title": "Translate a draft", "readOnlyHint": True},
     # --- Courts and jurisdiction ---
     "get_case_status": {"title": "Get case status", "readOnlyHint": True},
     "court_directory": {"title": "Court directory", "readOnlyHint": True},

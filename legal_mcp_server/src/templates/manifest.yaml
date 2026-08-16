@@ -1,19 +1,198 @@
 # Drafting template manifest.
 #
-# Each entry declares the template file, what it produces, which parameters are
-# required, and the pre-conditions and post-execution steps a competent drafter
-# would check. The `checklist` is surfaced by review_draft, so a template can
-# carry its own procedural requirements rather than relying on the model to
-# remember them.
+# Each entry declares the template file, what it produces, which parameters
+# are required, and the pre-conditions and post-execution steps. The
+# `checklist` is surfaced by review_draft, so a template can carry its own
+# procedural requirements rather than relying on the model to recall them.
+#
+# `languages` lists the codes for which at least the static template text
+# is translated in languages.py; user-supplied parameters always pass
+# through unchanged so the document is fully usable even when only the
+# static text is translated.
 
 templates:
+  - key: writ_petition
+    file: writ_petition.j2
+    title: Writ Petition under Articles 226/227 of the Constitution of India
+    category: pleading
+    description: >
+      Petition to the High Court under Articles 226 and 227 of the
+      Constitution of India. Available in English and Hindi.
+    languages:
+      - en
+      - hi
+    required:
+      - court_place
+      - petitioner_name
+      - petitioner_address
+      - respondent_name
+      - respondent_address
+      - petition_number
+      - year
+      - facts
+      - grounds
+      - reliefs
+      - filing_date
+      - advocate_name
+    optional:
+      - jurisdiction_type
+      - petitioner_capacity
+      - respondent_capacity
+      - place
+    checklist:
+      - Relief under Article 226 (writ) or 227 (supervisory) is pleaded with the specific right infringed
+      - Facts are stated chronologically and are capable of proof
+      - Alternative remedy (appeal/revision) is addressed if available
+      - Limitation: Article 226 petitions must be filed without undue delay - no fixed period but laches can bar relief
+      - Territorial jurisdiction is pleaded (residence of respondent or cause of action within the court's territorial jurisdiction)
+      - Verification signed and dated; annexures listed
+    authority: Articles 226 and 227, Constitution of India
+    next_steps:
+      - Register the petition and obtain diary number
+      - Serve the respondent within the time ordered by the court
+      - File the affidavit in support before the returnable date
+
+  - key: civil_appeal
+    file: civil_appeal.j2
+    title: Civil Appeal from a judgment or decree
+    category: pleading
+    description: >
+      Civil Appeal before a High Court against the judgment and decree of a
+      subordinate court. Available in English and Hindi.
+    languages:
+      - en
+      - hi
+    required:
+      - court_place
+      - appellant_name
+      - appellant_address
+      - respondent_name
+      - respondent_address
+      - appeal_number
+      - year
+      - impugned_date
+      - lower_court
+      - lower_court_place
+      - lower_court_case_no
+      - facts
+      - grounds
+      - filing_date
+      - advocate_name
+    optional:
+      - jurisdiction_type
+      - reliefs
+      - place
+    checklist:
+      - Appeal filed within 90 days of the impugned judgment/decree (s.96 CPC) or 30 days for a decree (s.54 CPC) - verify limitation
+      - The impugned judgment is a "decree" or an appealable "order" under s.96/104 CPC
+      - Grounds specify the errors in the impugned judgment (findings of fact, law, or both)
+      - Territorial and pecuniary jurisdiction of the appellate court is pleaded
+      - Certified copy of the impugned judgment is annexed
+      - Court fee paid as per the Tamil Nadu Court Fees Act / corresponding state act
+    authority: Sections 96, 104 and Order 41, Code of Civil Procedure, 1908
+    next_steps:
+      - File the appeal with certified copy of the impugned judgment within the limitation period
+      - Serve notice on the respondent through the court registry
+      - Prepare paper book with pleadings and evidence before the hearing
+
+  - key: criminal_appeal
+    file: criminal_appeal.j2
+    title: Criminal Appeal under CrPC / conviction appeal
+    category: pleading
+    description: >
+      Criminal Appeal against conviction or acquittal under the Code of
+      Criminal Procedure, 1973. Available in English and Hindi.
+    languages:
+      - en
+      - hi
+    required:
+      - court_place
+      - appellant_name
+      - appellant_address
+      - respondent_name
+      - respondent_address
+      - appeal_number
+      - year
+      - impugned_date
+      - lower_court
+      - lower_court_place
+      - lower_court_case_no
+      - facts
+      - grounds
+      - filing_date
+      - advocate_name
+    optional:
+      - jurisdiction_type
+      - reliefs
+      - place
+    checklist:
+      - Appeal filed within the limitation period (30 days from the impugned order for conviction; 60 days for acquittal under s.414 CrPC)
+      - Grounds specify perversity in findings of fact, misreading of evidence, or misdirection in law
+      - If the appeal is against conviction, the sentence and its legality are addressed
+      - If the appeal is against acquittal, the scope of interference is addressed
+      - Certified copy of the impugned judgment and the charge are annexed
+      - Court fee as per the schedule
+    authority: Sections 374, 380, 414, Code of Criminal Procedure, 1973
+    next_steps:
+      - File the appeal with certified copy of the impugned judgment within the limitation period
+      - Serve the State/respondent through the court registry
+      - Urgent prayer for suspension of sentence and bail, if applicable
+
+  - key: slp
+    file: slp.j2
+    title: Special Leave Petition under Article 136 of the Constitution
+    category: petition
+    description: >
+      Special Leave Petition to the Supreme Court of India under Article
+      136. Available in English and Hindi.
+    languages:
+      - en
+      - hi
+    required:
+      - petitioner_name
+      - petitioner_address
+      - respondent_name
+      - respondent_address
+      - petition_number
+      - year
+      - impugned_date
+      - impugned_court
+      - impugned_court_place
+      - impugned_court_case_no
+      - impugned_disposal
+      - facts
+      - grounds
+      - filing_date
+      - advocate_name
+    optional:
+      - jurisdiction_type
+      - reliefs
+      - place
+    checklist:
+      - A substantial question of law of general public importance is pleaded - SLP is a special remedy, not a routine appeal
+      - The impugned order is a "judgment, decree, determination, sentence or order" of any court or tribunal in India
+      - The SLP is filed within 90 days of the impugned order (delay condonation must be pleaded if beyond 90 days)
+      - Grounds specify why the impugned order suffers from an error apparent on the face of the record or is perverse
+      - No alternative effective remedy remains available
+      - Verified by the petitioner or an authorized person; annexures listed
+    authority: Article 136, Constitution of India; Order XLV, Supreme Court Rules, 2013
+    next_steps:
+      - File within 90 days of the impugned order (seek condonation of delay if late)
+      - Serve notice on the respondent through the Registry
+      - Prepare paper book with impugned judgment and annexures
+      - If notice is issued, file counter-affidavit if you are the respondent
+
   - key: ni_138_notice
     file: ni_138_notice.j2
     title: Statutory notice under section 138 of the Negotiable Instruments Act
     category: notice
     description: >
-      Demand notice to the drawer of a dishonoured cheque. Must be issued within
-      30 days of the payee learning of dishonour; that period is not extendable.
+      Demand notice to the drawer of a dishonoured cheque. Must be issued
+      within 30 days of the payee learning of dishonour. Available in
+      English and Hindi.
+    languages:
+      - en
+      - hi
     required:
       - sender_name
       - sender_address
@@ -62,7 +241,10 @@ templates:
     category: notice
     description: >
       All-purpose pre-litigation demand notice setting out facts, legal basis
-      and demands, with a compliance period.
+      and demands, with a compliance period. Available in English and Hindi.
+    languages:
+      - en
+      - hi
     required:
       - sender_name
       - sender_address
@@ -100,7 +282,10 @@ templates:
     category: notice
     description: >
       Point-by-point reply denying allegations, stating the true facts and
-      raising defences, with rights reserved.
+      raising defences, with rights reserved. Available in English and Hindi.
+    languages:
+      - en
+      - hi
     required:
       - sender_name
       - sender_address
@@ -131,7 +316,11 @@ templates:
     title: Complaint under the Consumer Protection Act, 2019
     category: pleading
     description: >
-      Complaint to a District, State or National Commission, with verification.
+      Complaint to a District, State or National Commission, with
+      verification. Available in English and Hindi.
+    languages:
+      - en
+      - hi
     required:
       - forum_name
       - forum_place
@@ -167,8 +356,8 @@ templates:
     title: Application under the Right to Information Act, 2005
     category: application
     description: >
-      Request for information from a public authority, with fee and severability
-      requests.
+      Request for information from a public authority, with fee and
+      severability requests.
     required:
       - public_authority
       - authority_address
@@ -201,8 +390,8 @@ templates:
     title: General affidavit
     category: affidavit
     description: >
-      Affidavit in support of a petition or application, with verification and
-      attestation block.
+      Affidavit in support of a petition or application, with verification
+      and attestation block.
     required:
       - forum_name
       - forum_place

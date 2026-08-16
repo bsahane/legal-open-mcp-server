@@ -1,68 +1,45 @@
-{{ sender_name | upper }}
+{{ t('dear_sir_madam', language) }}
 {{ sender_address }}
 {% if sender_phone %}Tel: {{ sender_phone }}{% endif %}
 {% if sender_email %}Email: {{ sender_email }}{% endif %}
 
-Ref: {{ reference | default('NIL') }}
-Date: {{ notice_date }}
+{{ t('ref', language) }} {{ reference | default('NIL') }}
+{{ t('date_label', language) }} {{ notice_date }}
 
-BY REGISTERED POST A.D.{% if sender_email %} AND BY EMAIL{% endif %}
+{{ t('registered_post_ad', language) }}{% if sender_email %} {{ t('and_by_email', language) }}{% endif %}
 
-To,
+{{ t('to', language) }},
 {{ recipient_name }}
 {{ recipient_address }}
 
-Sub: Statutory notice under Section 138 read with Section 142 of the
-     Negotiable Instruments Act, 1881 demanding payment of Rs {{ cheque_amount | inr }}/-
-     against dishonoured cheque No. {{ cheque_number }} dated {{ cheque_date }}
+{{ t('sub', language) }} {{ t('dear_sir_madam', language) | replace(',','') }} Statutory notice under Section 138 read with Section 142 of the Negotiable Instruments Act, 1881 demanding payment of Rs {{ cheque_amount | inr }}/- against dishonoured cheque No. {{ cheque_number }} dated {{ cheque_date }}
 
-Sir/Madam,
+{{ t('under_instructions', language) }} {{ client_name }},
+{{ client_address }} {{ t('hereinafter_client', language) }}
 
-Under instructions from and on behalf of my client {{ client_name }},
-{{ client_address }} (hereinafter "my client"), I address you as under:
+1. {{ t('that_you_are_acquainted', language) }}
 
-1. That you are well acquainted with my client and the transactions between
-   you and my client.
+2. {{ t('that_legally_liable_to_pay', language) | replace('{{ amount_inr }}', cheque_amount | inr) | replace('{{ amount_words }}', amount_in_words) }}
 
-2. That {{ liability_description }}. You were and continue to be legally liable
-   to pay a sum of Rs {{ cheque_amount | inr }}/- (Rupees {{ amount_in_words }} only)
-   to my client.
+3. {{ t('cheque_issued', language) | replace('{{ cheque_number }}', cheque_number) | replace('{{ cheque_date }}', cheque_date) | replace('{{ cheque_amount_inr }}', cheque_amount | inr) | replace('{{ drawee_bank }}', drawee_bank) | replace('{{ drawee_branch }}', drawee_branch) | replace('{{ drawer_account_clause }}', (', from your account No. ' ~ drawer_account) if drawer_account else '') }}
 
-3. That in discharge of the said legally enforceable debt and liability, you
-   issued to my client cheque bearing No. {{ cheque_number }} dated {{ cheque_date }}
-   for a sum of Rs {{ cheque_amount | inr }}/- drawn on {{ drawee_bank }},
-   {{ drawee_branch }} branch{% if drawer_account %}, from your account
-   No. {{ drawer_account }}{% endif %} (hereinafter "the said cheque").
+4. {{ t('presented_for_encashment', language) | replace('{{ payee_bank }}', payee_bank) | replace('{{ payee_branch }}', payee_branch) | replace('{{ presentation_date }}', presentation_date) }}
 
-4. That my client presented the said cheque for encashment through
-   {{ payee_bank }}, {{ payee_branch }} branch, on {{ presentation_date }}.
+5. {{ t('returned_unpaid', language) | replace('{{ dishonour_reason }}', dishonour_reason) | replace('{{ dishonour_memo_date }}', dishonour_memo_date) | replace('{{ dishonour_date }}', dishonour_date) }}
 
-5. That the said cheque was returned unpaid by the drawee bank with the
-   endorsement "{{ dishonour_reason }}", and the said return memo dated
-   {{ dishonour_memo_date }} was received by my client on {{ dishonour_date }}.
-
-6. That the dishonour of the said cheque is on account of your act and
-   omission, and constitutes an offence punishable under Section 138 of the
-   Negotiable Instruments Act, 1881.
+6. {{ t('dishonour_is_offence', language) }}
 {% if additional_facts %}
 7. That {{ additional_facts }}
 {% endif %}
 
-I therefore call upon you, through this notice, to pay to my client the sum of
-Rs {{ cheque_amount | inr }}/- (Rupees {{ amount_in_words }} only)
-within FIFTEEN (15) DAYS from the date of receipt of this notice, failing which
-my client shall be constrained to initiate criminal proceedings against you
-under Section 138 of the Negotiable Instruments Act, 1881 before the competent
-court, entirely at your risk as to costs and consequences, and shall also be
-at liberty to pursue such civil remedies as are available in law for recovery
-of the said amount together with interest and costs.
+{{ t('therefore_call_upon', language) | replace('{{ amount_inr }}', cheque_amount | inr) | replace('{{ amount_words }}', amount_in_words) }} {{ t('fifteen_days', language) }} {{ t('within_days_failing', language) }} and shall also be at liberty to pursue such civil remedies as are available in law for recovery of the said amount together with interest and costs.
 
 A copy of this notice is retained in my office for further necessary action.
 
-Yours faithfully,
+{{ t('yours_faithfully', language) }}
 
 
 {{ advocate_name | default(sender_name) }}
 {% if advocate_enrolment %}Advocate, Enrolment No. {{ advocate_enrolment }}{% endif %}
 
-Copy to: My client, {{ client_name }}, for record.
+{{ t('copy_to_client', language) }}

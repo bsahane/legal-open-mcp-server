@@ -17,6 +17,14 @@ from typing import Any, Dict, List, Optional
 import yaml
 from jinja2 import Environment, FileSystemLoader, StrictUndefined, TemplateError
 
+from legal_mcp_server.src.templates.languages import (
+    SUPPORTED_LANGUAGES,
+    translation_entries,
+    validate_language,
+)
+from legal_mcp_server.src.templates.languages import (
+    t as _t,
+)
 from legal_mcp_server.utils.pylogger import get_python_logger
 
 logger = get_python_logger()
@@ -85,6 +93,7 @@ def _environment() -> Environment:
         keep_trailing_newline=True,
     )
     env.filters["inr"] = inr
+    env.globals["t"] = _t
     return env
 
 
@@ -158,24 +167,29 @@ def list_templates(category: Optional[str] = None) -> Dict[str, Any]:
         }
 
 
-def draft_document(template_key: str, parameters: Dict[str, Any]) -> Dict[str, Any]:
+def draft_document(
+    template_key: str,
+    parameters: Dict[str, Any],
+    language: Optional[str] = None,
+) -> Dict[str, Any]:
     """Render a legal document from a template and a set of facts.
 
     TOOL_NAME=draft_document
     DISPLAY_NAME=Draft Legal Document
     USECASE=Produce a notice, complaint, application or affidavit in correct Indian form from facts the user has supplied
-    INSTRUCTIONS=1. Call list_templates first to learn the required parameters, 2. Collect every required parameter from the user - never invent names, addresses, amounts or dates, 3. Render, 4. Give the user the draft together with its checklist, 5. Run verify_all_citations over the draft if it cites any authority
-    INPUT_DESCRIPTION=template_key (string, required): key from list_templates, e.g. "ni_138_notice". parameters (object, required): the facts, matching the template's required and optional parameters. List parameters such as facts, demands and reliefs take arrays of strings.
+    INSTRUCTIONS=1. Call list_templates first to learn the required parameters, 2. Collect every required parameter from the user - never invent names, addresses, amounts or dates, 3. Pass language (e.g. "hi") to draft in a translated language where the template supports it, 4. Render, 5. Give the user the draft together with its checklist, 6. Run verify_all_citations over the draft if it cites any authority
+    INPUT_DESCRIPTION=template_key (string, required): key from list_templates, e.g. "ni_138_notice". parameters (object, required): the facts, matching the template's required and optional parameters. List parameters such as facts, demands and reliefs take arrays of strings. language (string, optional): one of the codes listed by get_document_languages (e.g. "en", "hi") - the static text of the template is rendered in that language; parameters you pass are used verbatim.
     OUTPUT_DESCRIPTION=Dictionary with status, the rendered draft, the template's procedural checklist, governing authority, next steps, and a reminder that the draft is unsigned and unserved
-    EXAMPLES=draft_document("rti_application", {"public_authority": "Municipal Corporation of Greater Mumbai", "authority_address": "...", "application_date": "2026-08-02", "information_sought": ["Copy of building plan approval for CTS 123"], "applicant_name": "...", "applicant_address": "..."})
+    EXAMPLES=draft_document("rti_application", {"public_authority": "Municipal Corporation of Greater Mumbai", "authority_address": "...", "application_date": "2026-08-02", "information_sought": ["Copy of building plan approval for CTS 123"], "applicant_name": "...", "applicant_address": "..."}), draft_document("ni_138_notice", {"sender_name": "...", "sender_address": "...", "notice_date": "2026-08-16", "recipient_name": "...", "recipient_address": "...", "client_name": "...", "client_address": "...", "liability_description": "...", "cheque_number": "123456", "cheque_date": "2026-07-01", "cheque_amount": 100000, "amount_in_words": "One Lakh Only", "drawee_bank": "...", "drawee_branch": "...", "payee_bank": "...", "payee_branch": "...", "presentation_date": "2026-07-02", "dishonour_reason": "Insufficient funds", "dishonour_memo_date": "2026-07-03", "dishonour_date": "2026-07-03"}, language="hi")
     PREREQUISITES=None - fully offline
-    RELATED_TOOLS=list_templates for parameters; review_draft to check the result; compute_cheque_bounce_timeline before a s.138 notice
+    RELATED_TOOLS=list_templates for parameters; get_document_languages for the language codes a template supports; review_draft to check the result; compute_cheque_bounce_timeline before a s.138 notice
 
     CPU-bound operation - uses def for template rendering.
 
     Args:
         template_key: Which template to render.
         parameters: The facts to render into it.
+        language: Optional language code for the static template text.
 
     Returns:
         Dict with the rendered draft and its checklist.
@@ -198,6 +212,22 @@ def draft_document(template_key: str, parameters: Dict[str, Any]) -> Dict[str, A
 
         if not isinstance(parameters, dict):
             raise ValueError("parameters must be an object")
+
+        language = validate_language(language) if language else "en"
+        supported = entry.get("languages", [])
+        if supported and language not in supported:
+            return {
+                "status": "unsupported_language",
+                "operation": "draft_document",
+                "template_key": template_key,
+                "requested_language": language,
+                "supported_languages": supported,
+                "message": (
+                    f"Template '{template_key}' supports {', '.join(supported)}; "
+                    f"'{language}' is not among them. Either pass one of those "
+                    "codes, or omit language for the default."
+                ),
+            }
 
         required = entry.get("required", [])
         missing = [
@@ -228,6 +258,7 @@ def draft_document(template_key: str, parameters: Dict[str, Any]) -> Dict[str, A
         # while a genuinely unknown name in a template still raises.
         context: Dict[str, Any] = {name: None for name in entry.get("optional", [])}
         context.update(parameters)
+        context["language"] = language
 
         unknown = set(parameters) - set(required) - set(entry.get("optional", []))
         if unknown:
@@ -247,14 +278,15 @@ def draft_document(template_key: str, parameters: Dict[str, Any]) -> Dict[str, A
             "template_key": template_key,
             "title": entry["title"],
             "category": entry.get("category"),
+            "language": language,
             "draft": rendered,
             "checklist": entry.get("checklist", []),
             "authority": entry.get("authority"),
             "next_steps": entry.get("next_steps", []),
             "message": (
-                f"Drafted '{entry['title']}'. Present the checklist to the user "
-                "alongside the draft. This document is unsigned and unserved - "
-                "this server does not send, file or serve anything."
+                f"Drafted '{entry['title']}' in {language}. Present the checklist "
+                "to the user alongside the draft. This document is unsigned and "
+                "unserved - this server does not send, file or serve anything."
             ),
             "disclaimer": (
                 "A template gets the form right; it cannot tell whether this is "
@@ -455,8 +487,229 @@ def review_draft(draft_text: str, template_key: Optional[str] = None) -> Dict[st
         }
 
 
+def get_document_languages(template_key: str) -> Dict[str, Any]:
+    """Report the languages a drafting template can render its static text in.
+
+    TOOL_NAME=get_document_languages
+    DISPLAY_NAME=Get Document Languages
+    USECASE=Check which languages a document template supports before drafting, so the user is not asked for a language the template cannot honour
+    INSTRUCTIONS=1. Call before drafting when the user asks for a document in a particular language, 2. If the requested language is not supported, either pick a supported one or note that only the static text is translated while user-supplied facts stay verbatim
+    INPUT_DESCRIPTION=template_key (string, required): the template key, e.g. "writ_petition"
+    OUTPUT_DESCRIPTION=Dictionary with status, the template, the supported language codes and their English names, and a note on how translation behaves
+    EXAMPLES=get_document_languages("writ_petition"), get_document_languages("ni_138_notice")
+    PREREQUISITES=None - fully offline
+    RELATED_TOOLS=draft_document, which takes the language code; list_templates
+
+    CPU-bound operation - uses def for manifest and language inspection.
+
+    Args:
+        template_key: The template to inspect.
+
+    Returns:
+        Dict describing the supported languages.
+    """
+    try:
+        manifest = load_manifest()
+        entry = manifest.get(template_key)
+        if entry is None:
+            return {
+                "status": "not_found",
+                "operation": "get_document_languages",
+                "template_key": template_key,
+                "available": sorted(manifest),
+                "message": (
+                    f"No template '{template_key}'. Available: "
+                    f"{', '.join(sorted(manifest))}."
+                ),
+            }
+
+        supported = entry.get("languages", [])
+        names = {
+            "en": "English",
+            "hi": "Hindi",
+            "mr": "Marathi",
+            "ta": "Tamil",
+            "te": "Telugu",
+        }
+
+        return {
+            "status": "success",
+            "operation": "get_document_languages",
+            "template_key": template_key,
+            "title": entry["title"],
+            "languages": supported,
+            "language_names": {code: names.get(code, code) for code in supported},
+            "message": (
+                f"'{template_key}' can render its static text in: "
+                f"{', '.join(supported)}. Only the template's static text is "
+                "translated - the facts you pass are used exactly as given, so "
+                "names, addresses and amounts appear verbatim in the document."
+            ),
+        }
+
+    except Exception as e:
+        logger.error(f"Error in get_document_languages: {e}")
+        return {
+            "status": "error",
+            "operation": "get_document_languages",
+            "error": str(e),
+            "message": "Failed to inspect template languages",
+        }
+
+
+def _sentence_pattern(english: str) -> str:
+    """Build a regex that matches an English template sentence as rendered.
+
+    The translations dictionary stores ``{{ name }}`` placeholders for
+    user-supplied values; in a rendered draft those have been replaced by the
+    actual facts.  Each placeholder becomes a named capture group so the
+    values can be carried into the translated sentence.
+
+    Args:
+        english: The English template sentence.
+
+    Returns:
+        A compiled-searchable regex string.
+    """
+    import re
+
+    parts = re.split(r"\{\{\s*(\w+)\s*\}\}", english)
+    pattern = ""
+    for i, part in enumerate(parts):
+        if i % 2 == 0:
+            pattern += re.escape(part)
+        else:
+            pattern += f"(?P<{part}>.*?)"
+    return pattern
+
+
+def _substitute(sentence: str, captured: Dict[str, str]) -> str:
+    """Fill ``{{ name }}`` placeholders in a translated sentence with the
+    values captured from the English draft."""
+    import re
+
+    return re.sub(
+        r"\{\{\s*(\w+)\s*\}\}",
+        lambda m: captured.get(m.group(1), m.group(0)),
+        sentence,
+    )
+
+
+def translate_document(
+    draft_text: str,
+    target_language: str,
+    source_language: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Translate the static, templated prose of a rendered draft into a
+    supported Indian language, leaving names, addresses, amounts, case numbers
+    and legal citations untouched.
+
+    TOOL_NAME=translate_document
+    DISPLAY_NAME=Translate Draft Document
+    USECASE=Produce a translated version of a draft when the user asks for one, or when the facts are available in English but the document must be filed in a regional language
+    INSTRUCTIONS=1. Pass the draft text, 2. Pass the target_language code (en/hi/mr/ta/te), 3. Only the static template prose is translated - names, addresses, amounts, case numbers and citations are preserved verbatim, 4. For a truly filing-ready document, settle the translation with a translator or advocate before use
+    INPUT_DESCRIPTION=draft_text (string, required): the rendered draft. target_language (string, required): one of en/hi/mr/ta/te. source_language (string, optional): the language the draft is currently in, defaulting to en.
+    OUTPUT_DESCRIPTION=Dictionary with status, the translated draft, the languages involved, and a disclaimer
+    EXAMPLES=translate_document(draft, target_language="hi"), translate_document(draft, target_language="mr", source_language="en")
+    PREREQUISITES=None - fully offline, rule-based
+    RELATED_TOOLS=draft_document, which accepts a language natively; get_document_languages
+
+    CPU-bound operation - uses def for rule-based translation.
+
+    Args:
+        draft_text: The draft to translate.
+        target_language: Language code to translate the static prose into.
+        source_language: Language the draft is currently in (default "en").
+
+    Returns:
+        Dict with the translated draft and disclaimer.
+    """
+    try:
+        if not draft_text or not draft_text.strip():
+            raise ValueError("draft_text must be a non-empty string")
+        target_language = validate_language(target_language)
+        source_language = validate_language(source_language) if source_language else "en"
+
+        if source_language == target_language:
+            return {
+                "status": "success",
+                "operation": "translate_document",
+                "source_language": source_language,
+                "target_language": target_language,
+                "translated_draft": draft_text,
+                "message": (
+                    f"Source and target are both '{target_language}'; the draft "
+                    "was returned unchanged."
+                ),
+            }
+
+        if source_language not in SUPPORTED_LANGUAGES:
+            return {
+                "status": "unsupported_language",
+                "operation": "translate_document",
+                "source_language": source_language,
+                "supported_languages": sorted(SUPPORTED_LANGUAGES),
+                "message": f"Source language '{source_language}' is not supported.",
+            }
+
+        import re
+
+        # The translations dictionary holds the English template sentences
+        # exactly as they render (before user values replace the {{ }} slots).
+        # Reverse-match each English sentence in the draft, then emit the
+        # target-language sentence with the captured values substituted back
+        # in. Unknown text - names, addresses, amounts, case numbers, free-form
+        # facts - is left untouched.
+        entries = translation_entries()
+        translated = draft_text
+        replaced = 0
+        for key, langs in entries.items():
+            english = langs.get("en")
+            target = langs.get(target_language)
+            if not english or not target:
+                continue  # no English form or no translation available
+
+            pattern = _sentence_pattern(english)
+            matcher = re.compile(pattern, re.IGNORECASE)
+            target_sentence: str = target
+
+            def repl(match: re.Match, target_sentence: str = target_sentence) -> str:
+                return _substitute(target_sentence, match.groupdict())
+
+            translated, count = matcher.subn(repl, translated)
+            replaced += count
+
+        return {
+            "status": "success",
+            "operation": "translate_document",
+            "source_language": source_language,
+            "target_language": target_language,
+            "translated_draft": translated,
+            "sentences_translated": replaced,
+            "message": (
+                f"{replaced} standard clause(s) were translated from "
+                f"'{source_language}' to '{target_language}'. Names, addresses, "
+                "amounts, case numbers and citations were left untouched. For a "
+                "filing-ready document, have the result settled by a translator "
+                "or advocate - this is a rule-based pass over the standard "
+                "clauses, not a professional translation."
+            ),
+        }
+
+    except Exception as e:
+        logger.error(f"Error in translate_document: {e}")
+        return {
+            "status": "error",
+            "operation": "translate_document",
+            "error": str(e),
+            "message": "Failed to translate document",
+        }
+
+
 TOOLS: List[Any] = [
     list_templates,
     draft_document,
     review_draft,
+    get_document_languages,
+    translate_document,
 ]

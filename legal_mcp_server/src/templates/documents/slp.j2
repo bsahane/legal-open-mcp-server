@@ -1,0 +1,64 @@
+{{ t('in_the_supreme_court', language) }}
+{{ t('appellate_original_jurisdiction', language) | replace('{{ jurisdiction_type }}', jurisdiction_type | default('CIVIL')) }}
+
+BETWEEN
+
+{{ petitioner_name }}
+{{ petitioner_address }}
+
+... Petitioner(s) / Appellant(s)
+
+AND
+
+{{ respondent_name }}
+{{ respondent_address }}
+
+... Respondent(s)
+
+SPECIAL LEAVE PETITION (C) NO. {{ petition_number }} OF {{ year }}
+
+UNDER ARTICLE 136 OF THE CONSTITUTION OF INDIA
+
+AGAINST THE JUDGMENT AND ORDER DATED {{ impugned_date }} PASSED BY THE
+{{ impugned_court }}, {{ impugned_court_place }} IN {{ impugned_court_case_no }}
+WHEREBY THE HIGH COURT HAS {{ impugned_disposal }} THE APPEAL / APPLICATION
+OF THE PETITIONER(S) AGAINST THE ORDER OF THE TRIAL COURT / FORUM BELOW
+
+TO,
+THE HON'BLE THE CHIEF JUSTICE OF INDIA
+AND THE HON'BLE JUDGES
+OF THE SUPREME COURT OF INDIA
+
+MOST RESPECTFULLY SHOWETH:
+
+{{ t('the_facts_are_as_under', language) }}
+
+{% for fact in facts %}
+{{ loop.index }}. {{ fact }}
+{% endfor %}
+
+{{ t('grounds_for_relief', language) }}
+
+{% for ground in grounds %}
+{{ loop.index }}. {{ ground }}
+{% endfor %}
+
+PRAYER
+
+{{ t('prays_relief', language) }}
+
+1. That Special Leave to Appeal be granted to the Petitioner(s) under
+   Article 136 of the Constitution of India;
+{% if reliefs %}
+{% for item in reliefs %}
+{{ loop.index | int + 1 }}. {{ item }}
+{% endfor %}
+{% endif %}
+{{ t('and_pass_such_other', language) }}
+
+PLACE: {{ place }}
+DATE: {{ filing_date }}
+
+_________________________
+{{ advocate_name }}
+Advocate for the Petitioner(s)
