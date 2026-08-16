@@ -39,8 +39,7 @@ FIRST_AVAILABLE_YEAR = 1950
 
 def _case_law() -> dict:
     from legal_mcp_server.src.settings import settings
-    from legal_mcp_server.src.sources import case_law
-    from legal_mcp_server.src.sources import open_judgments
+    from legal_mcp_server.src.sources import case_law, open_judgments
 
     if case_law.active_backend() != "open_data":
         return {"status": "skipped", "reason": f"backend is '{case_law.active_backend()}'"}
@@ -109,11 +108,40 @@ def _historical() -> dict:
     return {"status": "ok", "returncode": 0}
 
 
+def _recent() -> dict:
+    """Harvest recently-published judgments from the courts' own sites.
+
+    The open-data corpus refreshes every two months; this bridges the lag so
+    searches cover judgments decided in the last few weeks. Incremental: only
+    PDFs not already on disk are downloaded.
+    """
+    scraper = ROOT / "scripts" / "scrape_recent.py"
+    if not scraper.exists():
+        return {"status": "skipped", "reason": "scraper not present"}
+    log.info("Scraping recent judgments from court websites")
+    proc = subprocess.run(
+        [sys.executable, str(scraper), "--download"],
+        capture_output=True,
+        text=True,
+        cwd=str(ROOT),
+    )
+    if proc.returncode != 0:
+        log.error("Recent-judgments scrape failed:\n%s", proc.stderr[-2000:])
+        return {
+            "status": "error",
+            "returncode": proc.returncode,
+            "stderr": proc.stderr[-2000:],
+        }
+    log.info("Recent-judgments scrape finished")
+    return {"status": "ok", "returncode": 0}
+
+
 def main() -> int:
     report = {
         "date": date.today().isoformat(),
         "case_law": _case_law(),
         "historical": _historical(),
+        "recent": _recent(),
         "statutes": _statutes(),
     }
     print(json.dumps(report, indent=2, default=str))

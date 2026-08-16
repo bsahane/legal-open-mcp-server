@@ -307,6 +307,10 @@ class OpenJudgmentsClient:
         """DuckDB glob for the digitized pre-1950 corpus (per-court dirs)."""
         return str(self.root / "historical" / "*" / "metadata.parquet")
 
+    def _recent_glob(self) -> str:
+        """DuckDB glob for the recently-published corpus (per-court dirs)."""
+        return str(self.root / "recent" / "*" / "metadata.parquet")
+
     def synced_courts(self) -> Dict[str, List[int]]:
         """Report which courts and years are available locally.
 
@@ -660,6 +664,37 @@ class OpenJudgmentsClient:
                 """
             )
 
+        # Recently-published judgments scraped from the courts' own sites to
+        # bridge the lag of the open-data corpus (see scripts/scrape_recent.py).
+        # Same per-court layout and scope semantics as the historical corpus.
+        recent_courts = self._recent_courts()
+        if recent_courts and (scope in ("all",) or scope in recent_courts):
+            globs.append(self._recent_glob())
+            recent_filter = ""
+            if scope not in ("all", "SC"):
+                recent_filter = f"WHERE court = '{_sql_quote(scope)}'"
+            parts.append(
+                f"""
+                SELECT
+                    court                      AS court_code,
+                    CAST(year AS VARCHAR)      AS year,
+                    bench,
+                    title,
+                    COALESCE(description, '')  AS description,
+                    COALESCE(judge, '')        AS judge,
+                    COALESCE(citation, '')     AS citation,
+                    NULL                       AS neutral_citation,
+                    NULL                       AS cnr,
+                    NULL                       AS disposal_nature,
+                    CAST(decision_date AS VARCHAR) AS decision_date,
+                    pdf_link                   AS locator,
+                    'recent'                   AS src,
+                    source_url
+                FROM read_parquet('{_sql_quote(self._recent_glob())}', union_by_name = true)
+                {recent_filter}
+                """
+            )
+
         if not parts:
             raise CorpusNotSynced(
                 "No local case-law metadata for that scope. Run the "
@@ -683,12 +718,28 @@ class OpenJudgmentsClient:
                 con.close()
         return courts
 
+    def _recent_courts(self) -> set:
+        """Court codes that have a recent-judgments corpus locally."""
+        courts: set = set()
+        for meta in self.root.glob("recent/*/metadata.parquet"):
+            con = self._connect()
+            try:
+                for (code,) in con.execute(
+                    f"SELECT DISTINCT court FROM read_parquet('{_sql_quote(str(meta))}')"
+                ).fetchall():
+                    courts.add(code)
+            finally:
+                con.close()
+        return courts
+
     def _make_doc_id(self, row: Dict[str, Any]) -> str:
         """Build a stable, reversible document id for a metadata row."""
         code = row["court_code"]
         name = Path(row["locator"] or "").name
         if row.get("src") == "hist":
             return f"hist:{code}:{row['bench']}:{row['year']}:{name}"
+        if row.get("src") == "recent":
+            return f"rc:{code}:{row['bench']}:{row['year']}:{name}"
         if code == "SC":
             return f"sc:{row['year']}:{row['locator']}"
         return f"hc:{code}:{row['bench']}:{row['year']}:{name}"
@@ -698,6 +749,10 @@ class OpenJudgmentsClient:
         if row.get("src") == "hist":
             return row.get("source_url") or str(
                 self.root / "historical" / (row.get("bench") or "") / "pdfs"
+            )
+        if row.get("src") == "recent":
+            return row.get("source_url") or str(
+                self.root / "recent" / (row.get("court_code") or "") / "pdfs"
             )
         code = row["court_code"]
         if code == "SC":
@@ -881,9 +936,9 @@ class OpenJudgmentsClient:
     def _parse_doc_id(self, doc_id: str) -> Dict[str, str]:
         """Split a document id back into its locating parts."""
         parts = doc_id.split(":")
-        if parts[0] == "hist" and len(parts) == 5:
+        if parts[0] in ("hist", "rc") and len(parts) == 5:
             return {
-                "source": "hist",
+                "source": parts[0],
                 "court_code": parts[1],
                 "bench": parts[2],
                 "year": parts[3],
@@ -916,21 +971,19 @@ class OpenJudgmentsClient:
         """
         parts = self._parse_doc_id(doc_id)
 
-        if parts.get("source") == "hist":
-            # Digitized pre-1950 corpus: the PDF lives on disk already.
+        if parts.get("source") in ("hist", "rc"):
+            # Digitized / recently-published corpus: the PDF may already live
+            # on disk; otherwise point at the court's own publication URL.
             metadata = await self._lookup_metadata(doc_id, parts)
             rel_pdf = metadata.get("locator") or ""
-            if not rel_pdf:
-                raise SourceUnavailable(
-                    f"No metadata row for {doc_id}; it is not in the historical corpus."
+            pdf = (self.root / rel_pdf) if rel_pdf else None
+            if pdf is not None and pdf.exists():
+                text = await asyncio.to_thread(self._extract_pdf_text, pdf)
+            else:
+                text = (
+                    "[No local PDF synced. Open the official publication at "
+                    f"{metadata.get('source_url') or doc_id}]"
                 )
-            pdf = self.root / rel_pdf
-            if not pdf.exists():
-                raise SourceUnavailable(
-                    f"No PDF synced for {doc_id}. Re-run the archive scraper to "
-                    f"download {parts['locator']}."
-                )
-            text = await asyncio.to_thread(self._extract_pdf_text, pdf)
             return Judgment(
                 doc_id=doc_id,
                 title=metadata.get("title") or doc_id,
@@ -938,7 +991,8 @@ class OpenJudgmentsClient:
                 date=(metadata.get("decision_date") or "")[:10] or None,
                 bench=parts.get("bench") or None,
                 text=text,
-                url=metadata.get("source_url") or str(pdf),
+                url=metadata.get("source_url")
+                or (str(pdf) if pdf is not None else ""),
                 citation=metadata.get("citation"),
                 neutral_citation=metadata.get("neutral_citation"),
                 disposal=metadata.get("disposal_nature"),
@@ -1011,13 +1065,10 @@ class OpenJudgmentsClient:
         except CorpusNotSynced:
             return {}
 
-        if parts["court_code"] == "SC":
-            predicate = "locator = ?"
-            params: List[Any] = [parts["locator"]]
-        else:
-            # HC locators are stored as full paths; match on the file name.
-            predicate = "locator LIKE ?"
-            params = [f"%{parts['locator']}"]
+        # Locators are bare names for the open-data release but full relative
+        # paths for the digitized/recent corpora; match on the file tail.
+        predicate = "ends_with(locator, ?)"
+        params: List[Any] = [parts["locator"]]
 
         full_sql = f"SELECT * FROM ({sql}) AS corpus WHERE {predicate} LIMIT 1"
 
