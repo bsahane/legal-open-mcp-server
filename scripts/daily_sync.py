@@ -30,11 +30,11 @@ sys.path.insert(0, str(ROOT))
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("daily_sync")
 
-# The open-data corpus begins in 2015; the nightly job re-checks the entire
+# The open-data corpus begins in 1950; the nightly job re-checks the entire
 # range through the current year so newly published judgments are picked up
 # regardless of their year. Files already present are skipped, so this stays
 # cheap even though the range grows over time.
-FIRST_AVAILABLE_YEAR = 2015
+FIRST_AVAILABLE_YEAR = 1950
 
 
 def _case_law() -> dict:
