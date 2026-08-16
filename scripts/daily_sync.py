@@ -30,7 +30,10 @@ sys.path.insert(0, str(ROOT))
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("daily_sync")
 
-SYNC_FROM_YEAR = 2015
+# The historical corpus (2015 onward) is populated once at deployment. A
+# daily job only needs to pick up newly published judgments, so it re-checks a
+# short rolling window instead of the full range every night.
+ROLLBACK_WINDOW_YEARS = 1
 
 
 def _case_law() -> dict:
@@ -43,10 +46,11 @@ def _case_law() -> dict:
 
     courts = ["Supreme Court", f"{settings.DEFAULT_HIGH_COURT} High Court"]
     to_year = date.today().year
-    log.info("Syncing case law for %s, %d-%d", courts, SYNC_FROM_YEAR, to_year)
+    from_year = max(2015, to_year - ROLLBACK_WINDOW_YEARS)
+    log.info("Syncing case law for %s, %d-%d", courts, from_year, to_year)
     client = open_judgments.get_client()
     summary = asyncio.run(
-        client.sync(courts=courts, from_year=SYNC_FROM_YEAR, to_year=to_year)
+        client.sync(courts=courts, from_year=from_year, to_year=to_year)
     )
     log.info(
         "Case law sync: %d new files, %d MB, %d skipped",
