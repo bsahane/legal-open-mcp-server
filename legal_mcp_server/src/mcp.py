@@ -5,9 +5,10 @@ research, drafting, matter-management and document-review tools for Indian
 law. It uses FastMCP to register and manage MCP capabilities.
 """
 
-from typing import Any, Callable, Dict, List
+from typing import Any, Callable, Dict, List, Optional
 
 from fastmcp import FastMCP
+from mcp.types import ToolAnnotations
 
 from legal_mcp_server.src.settings import settings
 from legal_mcp_server.utils.pylogger import (
@@ -119,6 +120,30 @@ def _court_tools() -> List[Callable[..., Any]]:
     return court_tools.TOOLS
 
 
+def _annotations_for(fn: Callable[..., Any]) -> Optional[ToolAnnotations]:
+    """Return the Connectors-Directory annotations registered for a tool.
+
+    Reads the per-tool metadata declared in ``tool_annotations.py`` and
+    materialises it as an MCP ``ToolAnnotations`` object. A tool with no
+    declared metadata logs a warning so a missing entry cannot slip through
+    silently during directory preparation.
+    """
+    from legal_mcp_server.src.tool_annotations import TOOL_ANNOTATIONS
+
+    meta = TOOL_ANNOTATIONS.get(fn.__name__)
+    if meta is None:
+        logger.warning(
+            f"Tool '{fn.__name__}' has no declared title/readOnlyHint/destructiveHint; "
+            "add it to legal_mcp_server/src/tool_annotations.py"
+        )
+        return None
+    return ToolAnnotations(
+        title=meta.get("title"),
+        readOnlyHint=meta.get("readOnlyHint"),
+        destructiveHint=meta.get("destructiveHint"),
+    )
+
+
 # Tool groups are loaded lazily so that a failure in one group is reported
 # against that group by name rather than as an opaque import error.
 TOOL_GROUPS: Dict[str, Callable[[], List[Callable[..., Any]]]] = {
@@ -172,7 +197,7 @@ class LegalMCPServer:
         for group, loader in TOOL_GROUPS.items():
             try:
                 for fn in loader():
-                    self.mcp.tool()(fn)
+                    self.mcp.tool(annotations=_annotations_for(fn))(fn)
                     registered += 1
             except Exception as e:
                 logger.error(f"Failed to register '{group}' tools: {e}")
