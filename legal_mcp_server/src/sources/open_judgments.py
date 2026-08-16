@@ -303,6 +303,10 @@ class OpenJudgmentsClient:
             self.hc_metadata_dir / "year=*" / "court=*" / "bench=*" / "metadata.parquet"
         )
 
+    def _historical_glob(self) -> str:
+        """DuckDB glob for the digitized pre-1950 corpus (per-court dirs)."""
+        return str(self.root / "historical" / "*" / "metadata.parquet")
+
     def synced_courts(self) -> Dict[str, List[int]]:
         """Report which courts and years are available locally.
 
@@ -589,7 +593,9 @@ class OpenJudgmentsClient:
                         strftime(try_strptime(decision_date, '%d-%m-%Y'), '%Y-%m-%d'),
                         CAST(decision_date AS VARCHAR)
                     )                          AS decision_date,
-                    path                       AS locator
+                    path                       AS locator,
+                    'od'                       AS src,
+                    NULL                       AS source_url
                 FROM read_parquet('{_sql_quote(self._sc_glob())}', hive_partitioning = true, union_by_name = true)
                 """
             )
@@ -615,9 +621,42 @@ class OpenJudgmentsClient:
                     cnr,
                     disposal_nature,
                     CAST(decision_date AS VARCHAR) AS decision_date,
-                    pdf_link                   AS locator
+                    pdf_link                   AS locator,
+                    'od'                       AS src,
+                    NULL                       AS source_url
                 FROM read_parquet('{_sql_quote(self._hc_glob())}', hive_partitioning = true, union_by_name = true)
                 {court_filter}
+                """
+            )
+
+        # Digitized pre-1950 corpus harvested from the courts' own archives
+        # (see scripts/scrape_bhc_archive.py). Only courts with historical data
+        # are matched; scope "all" includes every such court.
+        hist_courts = self._historical_courts()
+        if hist_courts and (scope in ("all",) or scope in hist_courts):
+            globs.append(self._historical_glob())
+            hist_filter = ""
+            if scope not in ("all", "SC"):
+                hist_filter = f"WHERE court = '{_sql_quote(scope)}'"
+            parts.append(
+                f"""
+                SELECT
+                    court                      AS court_code,
+                    CAST(year AS VARCHAR)      AS year,
+                    bench,
+                    title,
+                    COALESCE(description, '')  AS description,
+                    COALESCE(judge, '')        AS judge,
+                    COALESCE(citation, '')     AS citation,
+                    NULL                       AS neutral_citation,
+                    NULL                       AS cnr,
+                    NULL                       AS disposal_nature,
+                    CAST(decision_date AS VARCHAR) AS decision_date,
+                    pdf_link                   AS locator,
+                    'hist'                     AS src,
+                    source_url
+                FROM read_parquet('{_sql_quote(self._historical_glob())}', union_by_name = true)
+                {hist_filter}
                 """
             )
 
@@ -630,15 +669,36 @@ class OpenJudgmentsClient:
 
         return " UNION ALL ".join(parts), globs
 
+    def _historical_courts(self) -> set:
+        """Court codes that have a digitized historical corpus locally."""
+        courts: set = set()
+        for meta in self.root.glob("historical/*/metadata.parquet"):
+            con = self._connect()
+            try:
+                for (code,) in con.execute(
+                    f"SELECT DISTINCT court FROM read_parquet('{_sql_quote(str(meta))}')"
+                ).fetchall():
+                    courts.add(code)
+            finally:
+                con.close()
+        return courts
+
     def _make_doc_id(self, row: Dict[str, Any]) -> str:
         """Build a stable, reversible document id for a metadata row."""
         code = row["court_code"]
+        name = Path(row["locator"] or "").name
+        if row.get("src") == "hist":
+            return f"hist:{code}:{row['bench']}:{row['year']}:{name}"
         if code == "SC":
             return f"sc:{row['year']}:{row['locator']}"
-        return f"hc:{code}:{row['bench']}:{row['year']}:{Path(row['locator'] or '').name}"
+        return f"hc:{code}:{row['bench']}:{row['year']}:{name}"
 
     def _public_url(self, row: Dict[str, Any]) -> str:
         """Public HTTPS URL for the judgment PDF."""
+        if row.get("src") == "hist":
+            return row.get("source_url") or str(
+                self.root / "historical" / (row.get("bench") or "") / "pdfs"
+            )
         code = row["court_code"]
         if code == "SC":
             # Supreme Court PDFs are grouped by language, with the English
@@ -821,6 +881,14 @@ class OpenJudgmentsClient:
     def _parse_doc_id(self, doc_id: str) -> Dict[str, str]:
         """Split a document id back into its locating parts."""
         parts = doc_id.split(":")
+        if parts[0] == "hist" and len(parts) == 5:
+            return {
+                "source": "hist",
+                "court_code": parts[1],
+                "bench": parts[2],
+                "year": parts[3],
+                "locator": parts[4],
+            }
         if parts[0] == "sc" and len(parts) == 3:
             return {"court_code": "SC", "year": parts[1], "locator": parts[2], "bench": ""}
         if parts[0] == "hc" and len(parts) == 5:
@@ -847,6 +915,36 @@ class OpenJudgmentsClient:
             The judgment with extracted text.
         """
         parts = self._parse_doc_id(doc_id)
+
+        if parts.get("source") == "hist":
+            # Digitized pre-1950 corpus: the PDF lives on disk already.
+            metadata = await self._lookup_metadata(doc_id, parts)
+            rel_pdf = metadata.get("locator") or ""
+            if not rel_pdf:
+                raise SourceUnavailable(
+                    f"No metadata row for {doc_id}; it is not in the historical corpus."
+                )
+            pdf = self.root / rel_pdf
+            if not pdf.exists():
+                raise SourceUnavailable(
+                    f"No PDF synced for {doc_id}. Re-run the archive scraper to "
+                    f"download {parts['locator']}."
+                )
+            text = await asyncio.to_thread(self._extract_pdf_text, pdf)
+            return Judgment(
+                doc_id=doc_id,
+                title=metadata.get("title") or doc_id,
+                court=court_label(parts["court_code"]),
+                date=(metadata.get("decision_date") or "")[:10] or None,
+                bench=parts.get("bench") or None,
+                text=text,
+                url=metadata.get("source_url") or str(pdf),
+                citation=metadata.get("citation"),
+                neutral_citation=metadata.get("neutral_citation"),
+                disposal=metadata.get("disposal_nature"),
+                cnr=metadata.get("cnr"),
+            )
+
         url = self._public_url(parts)
 
         safe_name = re.sub(r"[^A-Za-z0-9_.-]", "_", doc_id) + ".pdf"

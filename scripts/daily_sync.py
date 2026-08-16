@@ -81,10 +81,39 @@ def _statutes() -> dict:
     return {"status": "ok", "returncode": 0}
 
 
+def _historical() -> dict:
+    """Re-scrape the digitized Bombay High Court archive (pre-1950 corpus).
+
+    The Court digitizes more volumes over time; the scraper is incremental, so
+    a nightly run only downloads PDFs that are not already on disk and rewrites
+    the historical metadata parquet.
+    """
+    scraper = ROOT / "scripts" / "scrape_bhc_archive.py"
+    if not scraper.exists():
+        return {"status": "skipped", "reason": "scraper not present"}
+    log.info("Scraping Bombay High Court archive for new digitized judgments")
+    proc = subprocess.run(
+        [sys.executable, str(scraper), "--download"],
+        capture_output=True,
+        text=True,
+        cwd=str(ROOT),
+    )
+    if proc.returncode != 0:
+        log.error("Archive scrape failed:\n%s", proc.stderr[-2000:])
+        return {
+            "status": "error",
+            "returncode": proc.returncode,
+            "stderr": proc.stderr[-2000:],
+        }
+    log.info("Archive scrape finished")
+    return {"status": "ok", "returncode": 0}
+
+
 def main() -> int:
     report = {
         "date": date.today().isoformat(),
         "case_law": _case_law(),
+        "historical": _historical(),
         "statutes": _statutes(),
     }
     print(json.dumps(report, indent=2, default=str))
