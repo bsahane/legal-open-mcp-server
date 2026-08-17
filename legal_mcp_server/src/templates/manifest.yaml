@@ -419,3 +419,222 @@ templates:
       - Verification clause covers every paragraph
       - Sworn before an Oath Commissioner or Notary
       - Stamped as required by the court's rules
+
+  - key: civil_revision
+    file: civil_revision.j2
+    title: Civil Revision under Section 115 of the Code of Civil Procedure
+    category: pleading
+    description: >
+      Civil Revision Petition to the High Court under Section 115 CPC
+      against an order of a subordinate court not appealable but
+      revisable. Available in English and Hindi.
+    languages:
+      - en
+      - hi
+    required:
+      - court_place
+      - revision_petitioner_name
+      - revision_petitioner_address
+      - respondent_name
+      - respondent_address
+      - revision_number
+      - year
+      - impugned_date
+      - lower_court
+      - lower_court_place
+      - lower_court_case_no
+      - facts
+      - grounds
+      - filing_date
+      - advocate_name
+    optional:
+      - jurisdiction_type
+      - reliefs
+      - place
+    checklist:
+      - The impugned order is NOT appealable under CPC - if it is, a revision petition is the wrong remedy
+      - Filed within 90 days of the impugned order (Article 124 of the Schedule to the Limitation Act, 1963)
+      - Grounds are restricted to jurisdictional error (court acted without jurisdiction, or failed to exercise jurisdiction) or material illegality apparent on the face of the record
+      - No fresh evidence is permitted - the revision court does not re-appreciate evidence
+      - Certified copy of the impugned order is annexed
+      - Court fee as per the schedule
+    authority: Section 115, Code of Civil Procedure, 1908; Article 124, Schedule to the Limitation Act, 1963
+    next_steps:
+      - File the revision petition with certified copy of the impugned order within the 90-day limitation
+      - Serve notice on the respondent through the court registry
+      - If the revision is admitted, the court may stay the impugned order's operation
+
+  - key: criminal_revision
+    file: criminal_revision.j2
+    title: Criminal Revision under Section 397 CrPC
+    category: pleading
+    description: >
+      Criminal Revision Application to the High Court under Section 397
+      CrPC against an order of a subordinate criminal court. Available
+      in English and Hindi.
+    languages:
+      - en
+      - hi
+    required:
+      - court_place
+      - revision_petitioner_name
+      - revision_petitioner_address
+      - respondent_name
+      - respondent_address
+      - revision_number
+      - year
+      - impugned_date
+      - lower_court
+      - lower_court_place
+      - lower_court_case_no
+      - facts
+      - grounds
+      - filing_date
+      - advocate_name
+    optional:
+      - jurisdiction_type
+      - reliefs
+      - place
+    checklist:
+      - Filed within 90 days of the impugned order (Article 137, Limitation Act, 1963)
+      - Grounds are limited to jurisdictional error, material illegality, or an order that is manifestly erroneous and perverse
+      - The High Court cannot convert itself into a court of appeal and re-appreciate evidence - it may interfere only for exceptional jurisdictional or legal error
+      - Section 397(2): where a conviction has been recorded or an acquittal directed and a sentence imposed, the High Court may only call for the record and may not enhance the sentence without first giving the accused a hearing
+      - If the revision is by the accused, the prayer for suspension of sentence and bail must be expressly stated
+      - Certified copy of the impugned order is annexed
+    authority: Sections 397, 399, Code of Criminal Procedure, 1973; Article 137, Limitation Act, 1963
+    next_steps:
+      - File the revision application with certified copy of the impugned order within the 90-day limitation
+      - Serve the opposite party through the court registry
+      - If the revision is admitted, the court may stay the operation of the impugned order
+
+  - key: writ_under_article_32
+    file: writ_under_article_32.j2
+    title: Writ Petition directly under Article 32 of the Constitution (Supreme Court)
+    category: petition
+    description: >
+      Writ Petition directly before the Supreme Court of India under
+      Article 32. Used for enforcement of fundamental rights. Available
+      in English and Hindi.
+    languages:
+      - en
+      - hi
+    required:
+      - petitioner_name
+      - petitioner_address
+      - respondent_name
+      - respondent_address
+      - petition_number
+      - year
+      - facts
+      - grounds
+      - filing_date
+      - advocate_name
+    optional:
+      - court_place
+      - jurisdiction_type
+      - article
+      - writ_type
+      - reliefs
+      - place
+    checklist:
+      - The petition must invoke a specific Fundamental Right under Part III of the Constitution - a vague grievance of "public importance" without a fundamental right is not maintainable under Article 32
+      - Supreme Court can entertain a writ petition under Article 32 directly, without a prior High Court writ under Article 226
+      - Locus standi: for public interest litigation, the petitioner must show a genuine public interest and not be a mere meddlesome interloper
+      - No alternative remedy defence bars a petition under Article 32 (unlike Article 226, where the existence of an alternative remedy can be a factor)
+      - Reliefs pray for a specific writ: habeas corpus, mandamus, prohibition, certiorari, or quo warranto
+      - Verified; annexures listed
+    authority: Article 32, Constitution of India
+    next_steps:
+      - File the writ petition in the Supreme Court Registry and obtain a diary number
+      - Serve notice on the respondent through the Registry
+      - Prepare the paper book with annexures
+      - If the Court issues notice, file counter-affidavit if you are the respondent
+
+  - key: anticipatory_bail
+    file: anticipatory_bail.j2
+    title: Anticipatory Bail Application under Section 438 CrPC
+    category: application
+    description: >
+      Application for anticipatory bail under Section 438 of the Code of
+      Criminal Procedure, 1973, in the event of arrest in a non-bailable
+      offence. Available in English and Hindi.
+    languages:
+      - en
+      - hi
+    required:
+      - court_place
+      - applicant_name
+      - applicant_address
+      - respondent_name
+      - respondent_address
+      - application_number
+      - year
+      - fir_number
+      - fir_date
+      - police_station
+      - sections
+      - facts
+      - filing_date
+      - advocate_name
+    optional:
+      - jurisdiction_type
+      - code
+      - place
+      - bail_conditions
+    checklist:
+      - The offence must be non-bailable - anticipatory bail is not available for bailable offences
+      - The applicant must show that the accusation is false or that there is no risk of absconding or witness tampering
+      - The court may impose conditions under s.438(2): presence at investigation, no witness tampering, no similar offence, and other reasonable conditions
+      - If anticipatory bail is granted and the accused is subsequently arrested, the accused must be released on bail forthwith - the investigating officer must give notice to the applicant before arrest
+      - Where the FIR has not been registered, the applicant must still show that an arrest is imminent or reasonably apprehended
+      - The court must record reasons for granting or rejecting anticipatory bail
+    authority: Section 438, Code of Criminal Procedure, 1973
+    next_steps:
+      - File the application as soon as FIR is registered or arrest is apprehended - delay weakens the claim
+      - Serve notice on the public prosecutor and the investigating officer
+      - If granted, ensure the order is handed to the investigating officer before any arrest
+
+  - key: interim_application
+    file: interim_application.j2
+    title: Application for Temporary Injunction under Order 39, Rules 1 and 2 CPC
+    category: application
+    description: >
+      Application for temporary or ad-interim injunction in a pending
+      civil suit, under Order 39, Rules 1 and 2 of the Code of Civil
+      Procedure, 1908. Available in English and Hindi.
+    languages:
+      - en
+      - hi
+    required:
+      - court_place
+      - jurisdiction_type
+      - application_number
+      - year
+      - applicant_name
+      - applicant_address
+      - respondent_name
+      - respondent_address
+      - injunction_type
+      - facts
+      - grounds
+      - filing_date
+      - advocate_name
+    optional:
+      - place
+      - restrained_action
+      - restore_action
+      - reliefs
+    checklist:
+      - Prima facie case: the applicant must show a strong, not remote, likelihood of success
+      - Balance of convenience: the balance of convenience and comparative mischief tilts in favour of the applicant - an injunction should not be granted where damages would adequately compensate
+      - Irreparable harm: the applicant shows it cannot be adequately compensated in damages
+      - Under Rule 1 (mandatory injunction), the act to be restrained is not one the court cannot enforce
+      - Under Rule 2 (prohibitory injunction), the threatened act would cause injury - breach of contract, nuisance, or trespass are typical
+      - An ex parte ad-interim injunction is granted only in exceptional circumstances and must be followed by a returnable date for the respondent to be heard
+      - The applicant must typically give an undertaking to pay damages and to submit to the court's directions
+    authority: Order 39, Rules 1 and 2, Code of Civil Procedure, 1908
+    next_steps:
+      - File the application with an affidavit in support and the plaint or cause title
+      - Serve the application on the opposite party (or seek ex parte ad-interim relief if urgency justifies)
+      - Diarise the returnable date fixed by the court for the respondent's reply

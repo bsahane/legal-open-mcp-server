@@ -1,0 +1,69 @@
+{{ t('in_the_high_court', language) | replace('{{ court_place }}', court_place or 'BOMBAY') }}
+{{ t('appellate_jurisdiction', language) | replace('{{ jurisdiction_type }}', 'CRIMINAL') }}
+
+BETWEEN
+
+{{ applicant_name }}
+{{ applicant_address }}
+
+... Applicant
+
+AND
+
+{{ respondent_name }}
+{{ respondent_address }}
+
+... Respondent
+
+APPLICATION UNDER SECTION 438 OF THE CODE OF CRIMINAL PROCEDURE, 1973
+
+FOR ANTICIPATORY BAIL
+
+APPLICATION NO. {{ application_number }} OF {{ year }}
+
+TO,
+THE HON'BLE THE CHIEF JUSTICE
+AND THE HON'BLE JUDGES
+OF THE {{ court_place }} HIGH COURT
+
+MOST RESPECTFULLY SHOWETH:
+
+1. That your applicant, {{ applicant_name }}, apprehends arrest in connection
+   with FIR No. {{ fir_number }} dated {{ fir_date }} registered at
+   {{ police_station }} police station, under Sections {{ sections }} of the
+   {{ code | default('Indian Penal Code') }} (or the corresponding sections of
+   the Bharatiya Nyaya Sanhita, 2023, if the alleged offence post-dates
+   1 July 2024), and states that:
+
+{{ t('the_facts_are_as_under', language) }}
+
+{% for fact in facts %}
+{{ loop.index + 1 }}. {{ fact }}
+{% endfor %}
+
+2. That your applicant states that the accusation has been levelled
+   falsely and with mala fide intent.
+
+3. That your applicant has deep and permanent roots in the community and
+   has no intention of absconding or tampering with witnesses.
+
+4. That your applicant undertakes to surrender custody to the Court at
+   all times and to appear as and when required.
+
+{{ t('prays_relief', language) }}
+
+1. That the applicant may be granted anticipatory bail under Section 438
+   of the Code of Criminal Procedure, 1973;
+{% if bail_conditions %}
+{% for item in bail_conditions %}
+{{ loop.index | int + 1 }}. {{ item }}
+{% endfor %}
+{% endif %}
+{{ t('and_pass_such_other', language) }}
+
+PLACE: {{ place }}
+DATE: {{ filing_date }}
+
+_________________________
+{{ advocate_name }}
+Advocate for the Applicant

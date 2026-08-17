@@ -1,0 +1,63 @@
+{{ t('in_the_high_court', language) | replace('{{ court_place }}', court_place | default('BOMBAY')) }}
+{{ t('appellate_jurisdiction', language) | replace('{{ jurisdiction_type }}', jurisdiction_type | default('CIVIL') | default('CIVIL')) }}
+
+IN THE MATTER OF:
+
+{{ applicant_name }}
+{{ applicant_address }}
+
+... Applicant(s)
+
+AND
+
+{{ respondent_name }}
+{{ respondent_address }}
+
+... Respondent(s)
+
+APPLICATION NO. {{ application_number }} OF {{ year }}
+
+UNDER ORDER 39, RULES 1 AND 2, CODE OF CIVIL PROCEDURE, 1908
+
+FOR TEMPORARY INJUNCTION
+
+TO,
+THE HON'BLE THE CHIEF JUSTICE
+AND THE HON'BLE JUDGES
+OF THE {{ court_place }} HIGH COURT
+
+MOST RESPECTFULLY SHOWETH:
+
+{{ t('the_facts_are_as_under', language) }}
+
+{% for fact in facts %}
+{{ loop.index }}. {{ fact }}
+{% endfor %}
+
+{{ t('grounds_for_relief', language) }}
+
+{% for ground in grounds %}
+{{ loop.index }}. {{ ground }}
+{% endfor %}
+
+{{ t('prays_relief', language) }}
+
+1. {% if injunction_type == 'mandatory' %}Direct the Respondent(s) to restore the status quo ante by {{ restore_action }}{% else %}Restrain the Respondent(s) from {{ restrained_action }}{% endif %};
+{% if reliefs %}
+{% for item in reliefs %}
+{{ loop.index | int + 1 }}. {{ item }}
+{% endfor %}
+{% endif %}
+{{ t('and_pass_such_other', language) }}
+
+INTERIM RELIEF PRAYED:
+
+1. Ex parte ad-interim injunction in terms of prayer 1 above pending
+   hearing and final disposal of this application;
+
+PLACE: {{ place }}
+DATE: {{ filing_date }}
+
+_________________________
+{{ advocate_name }}
+Advocate for the Applicant(s)

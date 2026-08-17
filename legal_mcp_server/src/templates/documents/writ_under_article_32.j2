@@ -1,0 +1,63 @@
+{{ t('in_the_supreme_court', language) }}
+
+{% if jurisdiction_type == 'ORIGINAL' %}
+{{ t('original_jurisdiction', language) }}
+{% else %}
+{{ t('appellate_jurisdiction', language) | replace('{{ jurisdiction_type }}', jurisdiction_type | default('APPELLATE')) }}
+{% endif %}
+
+BETWEEN
+
+{{ petitioner_name }}
+{{ petitioner_address }}
+
+... Petitioner(s)
+
+AND
+
+{{ respondent_name }}
+{{ respondent_address }}
+
+... Respondent(s)
+
+WRIT PETITION NO. {{ petition_number }} OF {{ year }}
+
+UNDER ARTICLE {{ article | default('32') }} OF THE CONSTITUTION OF INDIA
+
+TO,
+THE HON'BLE THE CHIEF JUSTICE OF INDIA
+AND THE HON'BLE JUDGES
+OF THE SUPREME COURT OF INDIA
+
+MOST RESPECTFULLY SHOWETH:
+
+{{ t('the_facts_are_as_under', language) }}
+
+{% for fact in facts %}
+{{ loop.index }}. {{ fact }}
+{% endfor %}
+
+{{ t('grounds_for_relief', language) }}
+
+{% for ground in grounds %}
+{{ loop.index }}. {{ ground }}
+{% endfor %}
+
+PRAYER
+
+{{ t('prays_relief', language) }}
+
+1. Issue a writ, order or direction in the nature of {% if writ_type %}{{ writ_type }}{% else %}mandamus{% endif %};
+{% if reliefs %}
+{% for item in reliefs %}
+{{ loop.index | int + 1 }}. {{ item }}
+{% endfor %}
+{% endif %}
+{{ t('and_pass_such_other', language) }}
+
+PLACE: {{ place | default('NEW DELHI') }}
+DATE: {{ filing_date }}
+
+_________________________
+{{ advocate_name }}
+Advocate for the Petitioner(s)

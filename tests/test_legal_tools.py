@@ -543,11 +543,167 @@ class TestDraftingTools:
                     "advocate_name": "X",
                 },
             ),
+            (
+                "civil_revision",
+                {
+                    "court_place": "BOMBAY",
+                    "revision_petitioner_name": "A",
+                    "revision_petitioner_address": "Mumbai",
+                    "respondent_name": "B",
+                    "respondent_address": "Mumbai",
+                    "revision_number": "1",
+                    "year": "2026",
+                    "impugned_date": "2026-01-01",
+                    "lower_court": "District Court",
+                    "lower_court_place": "Thane",
+                    "lower_court_case_no": "CS 1/2025",
+                    "facts": ["Fact"],
+                    "grounds": ["Ground"],
+                    "filing_date": "2026-08-16",
+                    "advocate_name": "X",
+                },
+            ),
+            (
+                "criminal_revision",
+                {
+                    "court_place": "BOMBAY",
+                    "revision_petitioner_name": "C",
+                    "revision_petitioner_address": "Pune",
+                    "respondent_name": "State",
+                    "respondent_address": "Mumbai",
+                    "revision_number": "5",
+                    "year": "2026",
+                    "impugned_date": "2026-01-01",
+                    "lower_court": "Sessions Court",
+                    "lower_court_place": "Pune",
+                    "lower_court_case_no": "SC 34/2025",
+                    "facts": ["Fact"],
+                    "grounds": ["Ground"],
+                    "filing_date": "2026-08-16",
+                    "advocate_name": "X",
+                },
+            ),
+            (
+                "writ_under_article_32",
+                {
+                    "petitioner_name": "D",
+                    "petitioner_address": "Delhi",
+                    "respondent_name": "UoI",
+                    "respondent_address": "New Delhi",
+                    "petition_number": "WRIT/1",
+                    "year": "2026",
+                    "facts": ["Fact"],
+                    "grounds": ["Ground"],
+                    "filing_date": "2026-08-16",
+                    "advocate_name": "X",
+                },
+            ),
+            (
+                "anticipatory_bail",
+                {
+                    "court_place": "BOMBAY",
+                    "applicant_name": "E",
+                    "applicant_address": "Pune",
+                    "respondent_name": "State",
+                    "respondent_address": "Pune",
+                    "application_number": "AB/1",
+                    "year": "2026",
+                    "fir_number": "FIR/99/2026",
+                    "fir_date": "2026-07-01",
+                    "police_station": "Shivajinagar",
+                    "sections": "302, 506",
+                    "code": "IPC",
+                    "facts": ["Fact"],
+                    "filing_date": "2026-08-16",
+                    "advocate_name": "X",
+                },
+            ),
+            (
+                "interim_application",
+                {
+                    "court_place": "BOMBAY",
+                    "jurisdiction_type": "CIVIL",
+                    "application_number": "IA/1",
+                    "year": "2026",
+                    "applicant_name": "F",
+                    "applicant_address": "Mumbai",
+                    "respondent_name": "G",
+                    "respondent_address": "Mumbai",
+                    "injunction_type": "prohibitory",
+                    "restrained_action": "disposing of suit property",
+                    "facts": ["Fact"],
+                    "grounds": ["Ground"],
+                    "filing_date": "2026-08-16",
+                    "advocate_name": "X",
+                },
+            ),
         ]:
             result = drafting_tools.draft_document(key, params)
             assert result["status"] == "success", key
             assert "{{" not in result["draft"], key
             assert result["checklist"], key
+
+    def test_new_templates_render_in_hindi(self):
+        """New court-format templates produce Devanagari in Hindi mode."""
+        for key, params in [
+            (
+                "civil_revision",
+                {
+                    "court_place": "BOMBAY",
+                    "revision_petitioner_name": "A",
+                    "revision_petitioner_address": "Mumbai",
+                    "respondent_name": "B",
+                    "respondent_address": "Mumbai",
+                    "revision_number": "1",
+                    "year": "2026",
+                    "impugned_date": "2026-01-01",
+                    "lower_court": "District Court",
+                    "lower_court_place": "Thane",
+                    "lower_court_case_no": "CS 1/2025",
+                    "facts": ["Fact"],
+                    "grounds": ["Ground"],
+                    "filing_date": "2026-08-16",
+                    "advocate_name": "X",
+                },
+            ),
+            (
+                "anticipatory_bail",
+                {
+                    "court_place": "BOMBAY",
+                    "applicant_name": "E",
+                    "applicant_address": "Pune",
+                    "respondent_name": "State",
+                    "respondent_address": "Pune",
+                    "application_number": "AB/1",
+                    "year": "2026",
+                    "fir_number": "FIR/99/2026",
+                    "fir_date": "2026-07-01",
+                    "police_station": "Shivajinagar",
+                    "sections": "302, 506",
+                    "code": "IPC",
+                    "facts": ["Fact"],
+                    "filing_date": "2026-08-16",
+                    "advocate_name": "X",
+                },
+            ),
+        ]:
+            result = drafting_tools.draft_document(key, params, language="hi")
+            assert result["status"] == "success", key
+            assert result["language"] == "hi", key
+            assert any("\u0900" <= ch <= "\u097F" for ch in result["draft"]), key
+
+    def test_get_document_languages_for_new_templates(self):
+        """Every new template reports its supported languages."""
+        for key in (
+            "civil_revision",
+            "criminal_revision",
+            "writ_under_article_32",
+            "anticipatory_bail",
+            "interim_application",
+        ):
+            result = drafting_tools.get_document_languages(key)
+            assert result["status"] == "success", key
+            assert result["languages"] == ["en", "hi"], key
 
 
 class TestDocumentTools:
