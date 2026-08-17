@@ -1,0 +1,35 @@
+{# Base structure template - defines the overall document layout #}
+{% import 'macros.j2' as macros with context %}
+
+{% block letterhead %}
+{% include 'base_letterhead.j2' with context %}
+{% endblock %}
+
+{# Document title / notice type #}
+{% block document_title %}{% endblock %}
+
+{% block date_line %}
+fnukad {{ macros.date_format(notice_date | default(""), branding.date_format) }}
+{% endblock %}
+
+{% block notice_heading %}
+{{ macros.notice_title() }}
+{% endblock %}
+
+{% block recipient_block %}{% endblock %}
+
+{% block subject_line %}{% endblock %}
+
+{% block instruction_block %}
+vkeps oj ueqn i{kdkj {{ branding.advocate_name }}; {{ branding.enrollment }}; {% if branding.firm_name %}{{ branding.firm_name }}{% endif %} {% if branding.office_address %}{{ branding.office_address }}{% endif %} le{k fnyYs ;k ekfgrho:u o nk[kfoysY;k dkxni=kao:u vkf.k le{k lkafxrysizek.ks vki.kkl uksVhl ns.;kr ;srs dh]
+{% endblock %}
+
+{% block body %}{% endblock %}
+
+{% block prayer %}{% endblock %}
+
+{% block verification %}{% endblock %}
+
+{% block footer %}
+{% include 'base_footer.j2' with context %}
+{% endblock %}

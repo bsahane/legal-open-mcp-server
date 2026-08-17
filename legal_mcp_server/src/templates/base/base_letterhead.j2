@@ -1,0 +1,14 @@
+{# Base letterhead template for all legal documents #}
+{% import 'macros.j2' as macros with context %}
+
+{% set b = branding %}
+{% set sep = b.get('separator_style', 'equals') %}
+
+{# Advocate header block #}
+{{ b.get('advocate_name', '') }}
+{% if b.get('enrollment') %}{{ b.get('enrollment') }}{% endif %}
+{% if b.get('firm_name') %}{{ b.get('firm_name') }}{% endif %}
+{% if b.get('office_address') %}{{ b.get('office_address') }}{% endif %}
+Mobile: {{ b.get('mobile', '') }}
+{% if b.get('email') %}Email: {{ b.get('email') }}{% endif %}
+{{ macros.separator(sep, 60) }}

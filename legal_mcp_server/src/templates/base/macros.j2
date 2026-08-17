@@ -1,0 +1,113 @@
+{# Base macros for legal notice formatting #}
+
+{% macro separator(style="equals", length=60) %}
+{% if style == "equals" %}
+{{ "=" * length }}
+{% elif style == "underscore" %}
+{{ "_" * length }}
+{% elif style == "dash" %}
+{{ "-" * length }}
+{% else %}
+{{ "=" * length }}
+{% endif %}
+{% endmacro %}
+
+{% macro date_format(date_str, format="DD@MM@YYYY") %}
+{% if date_str %}
+{% if format == "DD@MM@YYYY" %}
+{{ date_str.replace("-", "@").replace("/", "@") }}
+{% elif format == "DD-MM-YYYY" %}
+{{ date_str.replace("/", "-").replace("@", "-") }}
+{% elif format == "DD/MM/YYYY" %}
+{{ date_str.replace("-", "/").replace("@", "/") }}
+{% else %}
+{{ date_str }}
+{% endif %}
+{% else %}
+{{ "DD@MM@YYYY" }}
+{% endif %}
+{% endmacro %}
+
+{% macro numbered_para(num, content, indent=0) %}
+{% set indent_str = "  " * indent %}
+{{ indent_str }}{{ num }}- {{ content }}
+{% endmacro %}
+
+{% macro advocate_block(branding, side="left") %}
+{% if side == "left" %}
+{{ branding.get('advocate_name', '') }}
+{{ branding.get('enrollment', '') }}
+{{ branding.get('firm_name', '') }}
+{{ branding.get('office_address', '') }}
+Mobile: {{ branding.get('mobile', '') }}
+{% if branding.get('email') %}Email: {{ branding.get('email') }}{% endif %}
+{% else %}
+{# Right side - recipient block handled by template #}
+{% endif %}
+{% endmacro %}
+
+{% macro notice_header(title, branding) %}
+{{ macros.separator(branding.get('separator_style', 'equals'), 60) }}
+{{ "vWM- " ~ title }}
+{{ macros.separator(branding.get('separator_style', 'equals'), 60) }}
+{% endmacro %}
+
+{% macro date_line(date_str, branding) %}
+fnukad {{ macros.date_format(date_str, branding.get('date_format', 'DD@MM@YYYY')) }}
+{% endmacro %}
+
+{% macro notice_title() %}
+uksVhl
+{% endmacro %}
+
+{% macro to_block(recipient_name, recipient_address, subject="", cheque_amount=None, cheque_number=None, cheque_date=None) %}
+izfr]
+vWM- {{ subject if subject else "Legal Notice" }}
+{% if cheque_amount and cheque_number and cheque_date %}
+ demanding payment of Rs {{ cheque_amount | inr }}/- against dishonoured cheque No. {{ cheque_number }} dated {{ cheque_date }}
+{% endif %}
+--------------------------------------;kalh
+{{ recipient_name }}
+{{ recipient_address }}
+-----------------------------------;kapsrQZs
+vkWfQl {{ recipient_name if recipient_name else "" }}
+-----------------------------------------------------;katdMqu
+{% endmacro %}
+
+{% macro instruction_block(branding) %}
+vkeps oj ueqn i{kdkj {{ branding.advocate_name }}; {{ branding.enrollment }}; {% if branding.firm_name %}{{ branding.firm_name }}{% endif %} {% if branding.office_address %}{{ branding.office_address }}{% endif %} le{k fnyYs ;k ekfgrho:u o nk[kfoysY;k dkxni=kao:u vkf.k le{k lkafxrysizek.ks vki.kkl uksVhl ns.;kr ;srs dh]
+{% endmacro %}
+
+{% macro verification_block(branding, place, date_str) %}
+vls dj.ks rqeP;kdMwu pqdY;kl vkeps i{kdkj rqeps fo:/n dk;nsf”kj dkjokbZ d:u
+Qkjdr ?ksrhy vkf.k eqykpk rkck ns[khy ?ksrhy ;kph rqEgh
+xkaHkhZ;kus uksan ?;koh-
+lnj uksVhlhpk [kpZ jDde :Ik;s 10]000@& gk rqepsoj Bso.;kr
+vkysyk vlwu] R;kph ,d izr rqEgkal jft- iks'Vkus ikBowu uDdy vkeps
+dk;kZy;kr iqjkO;kdkeh jk[kwu Bsoyh vkgs-
+dGko]s gh uksVhl
+ukf”kd
+fnukad {{ macros.date_format(date_str, branding.get('date_format', 'DD@MM@YYYY')) }} vWM- {{ branding.get('advocate_name', '') }}
+Jh- {{ branding.advocate_name }} {% if branding.enrollment %}{{ branding.enrollment }}{% endif %}
+i{kdkj
+{% endmacro %}
+
+{% macro copy_to_client(branding, client_name) %}
+lnj uksVhlhph ,d uDdy izr iqjkO;kdkeh vkepsdMs Bsoqu]
+eqGizr rqEgkl jft”Vj iks”Vkus ikBfor vkgksr-
+gh ukVs hl
+{% endmacro %}
+
+{% macro enclosures(list) %}
+{% if list %}
+Enclosures:
+{% for item in list %}
+- {{ item }}
+{% endfor %}
+{% endif %}
+{% endmacro %}
+
+{% macro page_break() %}
+
+---
+{% endmacro %}

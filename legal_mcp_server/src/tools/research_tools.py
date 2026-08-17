@@ -25,6 +25,14 @@ VERDICT_NOT_FOUND = "NOT_FOUND"
 VERDICT_AMBIGUOUS = "AMBIGUOUS"
 VERDICT_UNCHECKED = "UNCHECKED"
 
+# Confidence scores for each verdict type
+CONFIDENCE_SCORES = {
+    VERDICT_VERIFIED: 1.0,
+    VERDICT_NOT_FOUND: 0.2,
+    VERDICT_AMBIGUOUS: 0.5,
+    VERDICT_UNCHECKED: 0.0,
+}
+
 
 def _unavailable(operation: str, error: Exception) -> Dict[str, Any]:
     """Build the standard 'could not consult the source' response.
@@ -414,6 +422,7 @@ def _verify_statutory_citation(citation: cit.Citation) -> Dict[str, Any]:
             return {
                 "verdict": VERDICT_UNCHECKED,
                 "matches": [],
+                "confidence": CONFIDENCE_SCORES[VERDICT_UNCHECKED],
                 "note": (
                     f"'{citation.statute}' is not in the bundled corpus, so this "
                     "reference could not be checked either way. Confirm it on "
@@ -423,6 +432,7 @@ def _verify_statutory_citation(citation: cit.Citation) -> Dict[str, Any]:
         return {
             "verdict": VERDICT_NOT_FOUND,
             "matches": [],
+            "confidence": CONFIDENCE_SCORES[VERDICT_NOT_FOUND],
             "note": (
                 f"{known.title} is in the corpus but has no section "
                 f"{citation.section}. The section number is wrong or has been "
@@ -440,19 +450,109 @@ def _verify_statutory_citation(citation: cit.Citation) -> Dict[str, Any]:
                 "url": section.url,
             }
         ],
+        "confidence": CONFIDENCE_SCORES[VERDICT_VERIFIED],
         "note": f"Resolves to {section.act_title}, section {section.number}.",
     }
 
 
-async def verify_citation(citation: str) -> Dict[str, Any]:
+async def _verify_case_citation_dual(
+    citation: cit.Citation,
+    use_fallback: bool = True,
+    max_fallback_budget: int = 5,
+) -> Dict[str, Any]:
+    """
+    Verify a case citation with dual-source fallback.
+
+    First tries the primary backend (open_data). If that returns NOT_FOUND or
+    AMBIGUOUS and use_fallback is True, queries Indian Kanoon (paid) if budget
+    allows.
+    """
+    from legal_mcp_server.src.sources import case_law
+
+    # Try primary backend first
+    primary_result = await _verify_case_citation(citation)
+
+    if primary_result["verdict"] == VERDICT_VERIFIED:
+        return primary_result
+
+    # If primary failed and fallback enabled, try Indian Kanoon
+    if use_fallback and max_fallback_budget > 0:
+        try:
+            # Temporarily switch to indian_kanoon backend
+            original_backend = case_law.active_backend()
+            if original_backend != "indian_kanoon" and settings.INDIAN_KANOON_API_KEY:
+                case_law.set_backend("indian_kanoon")
+                try:
+                    fallback_result = await _verify_case_citation(citation)
+                    fallback_result["fallback_used"] = True
+                    fallback_result["primary_backend"] = original_backend
+                    fallback_result["fallback_backend"] = "indian_kanoon"
+                    return fallback_result
+                finally:
+                    case_law.set_backend(original_backend)
+        except Exception as e:
+            logger.warning(f"Dual-source fallback failed: {e}")
+
+    # Return primary result with confidence
+    primary_result["confidence"] = CONFIDENCE_SCORES.get(
+        primary_result["verdict"], 0.0
+    )
+    return primary_result
+
+
+def _build_verification_summary(checked: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Build a standardized verification summary for tool outputs."""
+    if not checked:
+        return {
+            "total": 0,
+            "verified": 0,
+            "not_found": 0,
+            "ambiguous": 0,
+            "unchecked": 0,
+            "avg_confidence": 1.0,
+            "all_verified": True,
+        }
+
+    tally = {
+        VERDICT_VERIFIED: 0,
+        VERDICT_NOT_FOUND: 0,
+        VERDICT_AMBIGUOUS: 0,
+        VERDICT_UNCHECKED: 0,
+    }
+    total_confidence = 0.0
+
+    for entry in checked:
+        verdict = entry.get("verdict", VERDICT_UNCHECKED)
+        tally[verdict] = tally.get(verdict, 0) + 1
+        total_confidence += entry.get("confidence", CONFIDENCE_SCORES.get(verdict, 0.0))
+
+    total = len(checked)
+    avg_confidence = total_confidence / total if total > 0 else 1.0
+    all_verified = tally[VERDICT_NOT_FOUND] == 0 and tally[VERDICT_AMBIGUOUS] == 0 and tally[VERDICT_UNCHECKED] == 0
+
+    return {
+        "total": total,
+        "verified": tally[VERDICT_VERIFIED],
+        "not_found": tally[VERDICT_NOT_FOUND],
+        "ambiguous": tally[VERDICT_AMBIGUOUS],
+        "unchecked": tally[VERDICT_UNCHECKED],
+        "avg_confidence": round(avg_confidence, 3),
+        "all_verified": all_verified,
+    }
+
+
+async def verify_citation(
+    citation: str,
+    use_dual_source: bool = True,
+) -> Dict[str, Any]:
     """Check that a single legal citation refers to something that actually exists.
 
     TOOL_NAME=verify_citation
     DISPLAY_NAME=Citation Verification
     USECASE=Confirm that a case citation or statutory reference is real before it goes into a memo, opinion, notice or pleading
     INSTRUCTIONS=1. Pass the citation exactly as written, 2. Read the verdict, 3. Present anything other than VERIFIED with its warning intact - never silently drop or reword a failed citation
-    INPUT_DESCRIPTION=citation (string, required): one citation, e.g. "(2014) 9 SCC 129", "AIR 1973 SC 1461", "2024:BHC-AS:12345", or "Section 138 of the Negotiable Instruments Act, 1881"
-    OUTPUT_DESCRIPTION=Dictionary with status, the parsed citation, verdict (VERIFIED, NOT_FOUND, AMBIGUOUS or UNCHECKED), matching authorities, and a note explaining the verdict
+    INPUT_DESCRIPTION=citation (string, required): one citation, e.g. "(2014) 9 SCC 129", "AIR 1973 SC 1461", "2024:BHC-AS:12345", or "Section 138 of the Negotiable Instruments Act, 1881". use_dual_source (bool, optional, default True): if True, falls back to Indian Kanoon when open_data cannot verify.
+    OUTPUT_DESCRIPTION=Dictionary with status, the parsed citation, verdict (VERIFIED, NOT_FOUND, AMBIGUOUS or UNCHECKED), matching authorities, confidence score, and a note explaining the verdict
     EXAMPLES=verify_citation("(2014) 9 SCC 129"), verify_citation("Section 27 of the Indian Contract Act, 1872")
     PREREQUISITES=Case citations need INDIAN_KANOON_API_KEY and cost Rs 0.50; statutory citations are checked offline and are free
     RELATED_TOOLS=verify_all_citations sweeps a whole document at once; get_judgment reads a verified authority
@@ -461,6 +561,7 @@ async def verify_citation(citation: str) -> Dict[str, Any]:
 
     Args:
         citation: A single citation string.
+        use_dual_source: If True, falls back to Indian Kanoon when open_data cannot verify.
 
     Returns:
         Dict with the verdict and any matching authorities.
@@ -476,6 +577,7 @@ async def verify_citation(citation: str) -> Dict[str, Any]:
                 "operation": "verify_citation",
                 "citation": citation,
                 "verdict": VERDICT_UNCHECKED,
+                "confidence": CONFIDENCE_SCORES[VERDICT_UNCHECKED],
                 "matches": [],
                 "note": (
                     "This string was not recognised as an Indian citation format, "
@@ -492,6 +594,7 @@ async def verify_citation(citation: str) -> Dict[str, Any]:
                 "citation": citation,
                 "parsed": parsed.to_dict(),
                 "verdict": VERDICT_UNCHECKED,
+                "confidence": CONFIDENCE_SCORES[VERDICT_UNCHECKED],
                 "matches": [],
                 "note": (
                     "ENABLE_CITATION_VERIFICATION is False, so no lookup was "
@@ -501,7 +604,9 @@ async def verify_citation(citation: str) -> Dict[str, Any]:
             }
 
         if parsed.kind is cit.CitationKind.CASE:
-            outcome = await _verify_case_citation(parsed)
+            outcome = await _verify_case_citation_dual(
+                parsed, use_fallback=use_dual_source
+            )
         else:
             outcome = _verify_statutory_citation(parsed)
 
@@ -511,7 +616,7 @@ async def verify_citation(citation: str) -> Dict[str, Any]:
             "citation": citation,
             "parsed": parsed.to_dict(),
             **outcome,
-            "message": f"Verdict: {outcome['verdict']}",
+            "message": f"Verdict: {outcome['verdict']} (confidence: {outcome.get('confidence', 0.0):.0%})",
         }
 
     except SourceUnavailable as e:
@@ -526,15 +631,19 @@ async def verify_citation(citation: str) -> Dict[str, Any]:
         }
 
 
-async def verify_all_citations(text: str, max_citations: int = 25) -> Dict[str, Any]:
+async def verify_all_citations(
+    text: str,
+    max_citations: int = 25,
+    use_dual_source: bool = True,
+) -> Dict[str, Any]:
     """Extract and verify every citation in a block of text.
 
     TOOL_NAME=verify_all_citations
     DISPLAY_NAME=Document Citation Sweep
     USECASE=Sweep a memo, opinion, notice or pleading for fabricated or mistaken authority before it is presented or sent
     INSTRUCTIONS=1. Pass the full text, 2. Read the summary counts first, 3. Reproduce every unverified citation to the user with its warning - a draft with unverified authority must be presented as such, never cleaned up silently
-    INPUT_DESCRIPTION=text (string, required): the prose to sweep. max_citations (int, optional, default 25): cap on case citations verified, to bound cost.
-    OUTPUT_DESCRIPTION=Dictionary with status, per-citation verdicts, counts by verdict, an all_verified flag, and the total spend incurred
+    INPUT_DESCRIPTION=text (string, required): the prose to sweep. max_citations (int, optional, default 25): cap on case citations verified, to bound cost. use_dual_source (bool, optional, default True): if True, falls back to Indian Kanoon when open_data cannot verify.
+    OUTPUT_DESCRIPTION=Dictionary with status, per-citation verdicts, counts by verdict, confidence scores, an all_verified flag, a verification summary, and the total spend incurred
     EXAMPLES=verify_all_citations(draft_memo_text), verify_all_citations(notice_text, max_citations=10)
     PREREQUISITES=Case citations cost Rs 0.50 each against the Indian Kanoon budget; statutory citations are free
     RELATED_TOOLS=verify_citation for a single citation; build_research_memo runs this sweep automatically
@@ -544,9 +653,10 @@ async def verify_all_citations(text: str, max_citations: int = 25) -> Dict[str, 
     Args:
         text: The prose to sweep for citations.
         max_citations: Maximum number of paid case-citation checks to run.
+        use_dual_source: If True, falls back to Indian Kanoon when open_data cannot verify.
 
     Returns:
-        Dict with a verdict for every citation found.
+        Dict with a verdict for every citation found, plus verification summary.
     """
     try:
         if not text or not text.strip():
@@ -560,6 +670,7 @@ async def verify_all_citations(text: str, max_citations: int = 25) -> Dict[str, 
                 "citations": [],
                 "citation_count": 0,
                 "all_verified": True,
+                "verification_summary": _build_verification_summary([]),
                 "message": (
                     "No citations found in this text. If it makes legal assertions "
                     "without authority, that is itself worth flagging to the user."
@@ -579,6 +690,7 @@ async def verify_all_citations(text: str, max_citations: int = 25) -> Dict[str, 
                             "citation": citation.raw,
                             "parsed": citation.to_dict(),
                             "verdict": VERDICT_UNCHECKED,
+                            "confidence": CONFIDENCE_SCORES[VERDICT_UNCHECKED],
                             "matches": [],
                             "note": (
                                 "Skipped: max_citations limit reached. This citation "
@@ -589,15 +701,26 @@ async def verify_all_citations(text: str, max_citations: int = 25) -> Dict[str, 
                     continue
                 case_budget -= 1
                 try:
-                    outcome = await _verify_case_citation(citation)
+                    outcome = await _verify_case_citation_dual(
+                        citation,
+                        use_fallback=use_dual_source,
+                        max_fallback_budget=case_budget,
+                    )
                 except SourceUnavailable as e:
                     outcome = {
                         "verdict": VERDICT_UNCHECKED,
+                        "confidence": CONFIDENCE_SCORES[VERDICT_UNCHECKED],
                         "matches": [],
                         "note": f"Source unavailable, not checked: {e}",
                     }
             else:
                 outcome = _verify_statutory_citation(citation)
+
+            # Ensure confidence is present
+            if "confidence" not in outcome:
+                outcome["confidence"] = CONFIDENCE_SCORES.get(
+                    outcome["verdict"], 0.0
+                )
 
             checked.append(
                 {
@@ -607,28 +730,20 @@ async def verify_all_citations(text: str, max_citations: int = 25) -> Dict[str, 
                 }
             )
 
-        tally = {
-            VERDICT_VERIFIED: 0,
-            VERDICT_NOT_FOUND: 0,
-            VERDICT_AMBIGUOUS: 0,
-            VERDICT_UNCHECKED: 0,
-        }
-        for entry in checked:
-            tally[entry["verdict"]] = tally.get(entry["verdict"], 0) + 1
+        verification_summary = _build_verification_summary(checked)
 
-        problems = [e for e in checked if e["verdict"] != VERDICT_VERIFIED]
-        all_verified = not problems
-
-        if all_verified:
+        if verification_summary["all_verified"]:
             message = f"All {len(checked)} citations verified against a live source."
         else:
             message = (
-                f"{len(problems)} of {len(checked)} citations are not verified "
-                f"({tally[VERDICT_NOT_FOUND]} not found, "
-                f"{tally[VERDICT_AMBIGUOUS]} ambiguous, "
-                f"{tally[VERDICT_UNCHECKED]} unchecked). Present each of these to "
-                "the user marked UNVERIFIED. Do not remove them quietly and do not "
-                "restate them as if they were confirmed."
+                f"{verification_summary['total'] - verification_summary['verified']} of "
+                f"{verification_summary['total']} citations are not verified "
+                f"({verification_summary['not_found']} not found, "
+                f"{verification_summary['ambiguous']} ambiguous, "
+                f"{verification_summary['unchecked']} unchecked). "
+                f"Average confidence: {verification_summary['avg_confidence']:.0%}. "
+                "Present each of these to the user marked UNVERIFIED. Do not remove them "
+                "quietly and do not restate them as if they were confirmed."
             )
 
         return {
@@ -636,9 +751,15 @@ async def verify_all_citations(text: str, max_citations: int = 25) -> Dict[str, 
             "operation": "verify_all_citations",
             "citations": checked,
             "citation_count": len(checked),
-            "verdict_counts": tally,
-            "unverified": problems,
-            "all_verified": all_verified,
+            "verdict_counts": {
+                VERDICT_VERIFIED: verification_summary["verified"],
+                VERDICT_NOT_FOUND: verification_summary["not_found"],
+                VERDICT_AMBIGUOUS: verification_summary["ambiguous"],
+                VERDICT_UNCHECKED: verification_summary["unchecked"],
+            },
+            "unverified": [e for e in checked if e["verdict"] != VERDICT_VERIFIED],
+            "all_verified": verification_summary["all_verified"],
+            "verification_summary": verification_summary,
             "skipped_for_budget": skipped,
             "backend": case_law.active_backend(),
             "message": message,

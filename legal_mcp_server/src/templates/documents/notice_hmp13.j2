@@ -1,0 +1,67 @@
+{# Notice under HMP 13(1) #}
+{% extends 'base_structure.j2' %}
+{% import 'macros.j2' as macros with context %}
+
+{% block document_title %}
+{{ macros.notice_header("js.kw fouksn fnaMksjdj", branding) }}
+{% endblock %}
+
+{% block date_line %}
+{{ macros.date_line(notice_date, branding) }}
+{% endblock %}
+
+{% block notice_heading %}
+{{ macros.notice_title() }}
+{% endblock %}
+
+{% block recipient_block %}
+izfr]
+{{ macros.to_block(recipient_name, recipient_address, "Notice under Section 13(1) of the Haryana Municipal Act / relevant Municipal Act") }}
+{% endblock %}
+
+{% block subject_line %}
+{{ macros.notice_title() }} {{ macros.date_line(notice_date, branding) }} {{ macros.notice_title() }} Notice under Section 13(1) of the Haryana Municipal Act
+{% endblock %}
+
+{% block instruction_block %}
+vkeps oj ueqn i{kdkj {{ branding.advocate_name }}; {{ branding.enrollment }}; {% if branding.firm_name %}{{ branding.firm_name }}{% endif %} {% if branding.office_address %}{{ branding.office_address }}{% endif %} le{k fnyYs ;k ekfgrho:u o nk[kfoysY;k dkxni=kao:u vkf.k le{k lkafxrysizek.ks vki.kkl uksVhl ns.;kr ;srs dh]
+{% endblock %}
+
+{% block body %}
+{{ macros.numbered_para(1, "vkeps i{kdkj gs vktjksth mijksDr ueqn iR;koj jkgr vlqu] rqEkpk o vkeps i{kdkjkapk fookg fn- {{ violation_date }} jksth Tokyk ekrk ykWUl flUuj] rk- flUuj] ft- ukf”kd ;sFkhy eaxy dk;kZy;ke/; s fganw fookg i)rh /keZ'kkL=] :<h ijaijk] jhrh fjoktkuqlkj] ijaijsuqlkj lia Uu >kysyk vkgs- lnjpk fookg e/;LFkh {{ client_name }} {{ client_address }} ;kapsekQZr tqGysyk vkgs- lnj fookg lekjaHkkr vkeps i{kdkjkauh rqEgkyk 1 rksG~;kps euh eaxGlw=] 3 xzWeps dkukrys] 1 rksG;kps usdysl] 3 xzWeph vaxBh] vls lksU;kps nkfxus dsyys s vlwu] pkanhP;k rksjMîkk dsysY;k vkgsr] lnjps loZ lksU;k o pkanhps nkfxus vktjksth rqeP;kdMsp vkgs-") }}
+
+{{ macros.numbered_para(2, "lnj fookg laca/kkrwu rqEgkyk vkeps vkeps i{kdkjkaikluw ,d eqyxk ukes ç;k.k fnukad {{ notice_date }} jksth >kysyk vkgs- vktjksth eqyxk ç;k.k gk rqeP;kdMs vkgs- rlps vktjksth rqEgh vkeps i{kdkjkaikluw xjksnj ukghr-") }}
+
+{{ macros.numbered_para(3, "lnjpk fookg >kY;kuarj rqEgh vkeps i{kdkjkaP;k ?kjh ukf”kd ;sFks ukan.;klkBh vkykr- yXukP;k nqlj~;k fno'kh yxspp rqEgh vkeps i{kdkj vkf.k R;kaps dqVqafc;kaleosr nson'kZuklkBh rqGtkijw ] dksYgkijw ] tstqjh ;sFk s xsykr- ijarq] dqBygh nson'kZu rqEgh eukiklwu vkf.k 'kkarrsr ?ksry ukgh-") }}
+
+{% for i, fact in enumerate(facts) %}
+{{ macros.numbered_para(i + 4, fact) }}
+{% endfor %}
+
+{% endblock %}
+
+{% block prayer %}
+rlsp rqeps gkWVsye/;s fn- {{ notice_date }} jksth ?kMysyh ?kVuk gh l{ke iqjkok vlwu rks U;k;ky;kiq<s lknj djk;pk vkgs R;keqGs rqEgh lnj iqjkO;ke/;s dqByhgh NsMNkM dYs ;kl vkeps i{kdkj rqeps fo:/n dk;ns’khj dkjokbZ djrhy] ;kph rqEgh xkHa khZ;kZu s uksan ?;koh-
+tj rqEgh vkEgh ekxr vlysizek.ks iqjkos vkEgkyk miyC/k d:u fny s ukghrj vkEgkyk ukbZyktkLro ek- U;k;ky;kekQZr rqEgkyk lk{k leUl dk<wu lnj iqjko s U;k;ky;kr lknj dj.;kps vkns’k n;kos ykxrhy- rRiwohZ rqEgh lnj iqjkos u”V dsY;kl rqEgh iqjkos u”V dys s Eg.kwu rqeps fo:/n dk;ns’khj dkjokbZ d: ;kph nsf[ky uksan ?;koh-
+lcc ;k uksVhl }kjs rqEgkyk dGo.;kr ;srs dh]
+lnj uksVhl feGkys iklwu 2 fnolkP;k vkr rqEgh vkeps i{kdkjuk rqeps gkWVsye/khy fn- {{ notice_date }} jksth jk=h 12 oktsiklwu rs fn- {{ notice_date }} jksth jk=h 11-59 feuhVki;Zarps dkWeu ,fj;ke/khy loZ fllhfVOgh QqVst vkf.k fn- {{ notice_date }} jksthP;k psdbu jftLVjph izr miyC/k d:u n;koh-
+vls dj.ks rqeP;kdMwu pqdY;kl vkeps i{kdkj rqeps fo:/n Hkkjrh; ukxjhd lqj{kk lafgrk 2023 ps dye 94 izek.ks
+{% endblock %}
+
+{% block verification %}
+vls dj.ks rqeP;kdMwu pqdY;kl vkeps i{kdkj rqeps fo:/n dk;nsf”kj dkjokbZ d:u
+Qkjdr ?ksrhy vkf.k eqykpk rkck ns[khy ?ksrhy ;kph rqEgh
+xkaHkhZ;kus uksan ?;koh-
+lnj uksVhlhpk [kpZ jDde :Ik;s 10]000@& gk rqepsoj Bso.;kr
+vkysyk vlwu] R;kph ,d izr rqEgkal jft- iks'Vkus ikBowu uDdy vkeps
+dk;kZy;kr iqjkO;kdkeh jk[kwu Bsoyh vkgs-
+dGko]s gh uksVhl
+ukf”kd
+fnukad {{ macros.date_format(notice_date, branding.date_format) }} vWM- {{ branding.advocate_name }}
+Jh- {{ branding.advocate_name }} {% if branding.enrollment %}{{ branding.enrollment }}{% endif %}
+i{kdkj
+{% endblock %}
+
+{% block footer %}
+{% include 'base_footer.j2' with context %}
+{% endblock %}

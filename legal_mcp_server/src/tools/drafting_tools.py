@@ -10,6 +10,7 @@ by its checklist and by an instruction to run the citation sweep before the
 document is used.
 """
 
+import asyncio
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -25,12 +26,14 @@ from legal_mcp_server.src.templates.languages import (
 from legal_mcp_server.src.templates.languages import (
     t as _t,
 )
+from legal_mcp_server.src.tools.research_tools import verify_all_citations
 from legal_mcp_server.utils.pylogger import get_python_logger
 
 logger = get_python_logger()
 
 TEMPLATE_ROOT = Path(__file__).resolve().parent.parent / "templates"
 DOCUMENT_DIR = TEMPLATE_ROOT / "documents"
+BASE_DIR = TEMPLATE_ROOT / "base"
 MANIFEST_PATH = TEMPLATE_ROOT / "manifest.yaml"
 
 
@@ -85,7 +88,7 @@ def inr(value: Any) -> str:
 def _environment() -> Environment:
     """Jinja2 environment configured to fail loudly on missing variables."""
     env = Environment(
-        loader=FileSystemLoader(str(DOCUMENT_DIR)),
+        loader=FileSystemLoader([str(DOCUMENT_DIR), str(BASE_DIR)]),
         undefined=StrictUndefined,
         trim_blocks=True,
         lstrip_blocks=True,
@@ -171,18 +174,20 @@ def draft_document(
     template_key: str,
     parameters: Dict[str, Any],
     language: Optional[str] = None,
+    auto_verify: bool = False,
+    branding: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Render a legal document from a template and a set of facts.
 
     TOOL_NAME=draft_document
     DISPLAY_NAME=Draft Legal Document
     USECASE=Produce a notice, complaint, application or affidavit in correct Indian form from facts the user has supplied
-    INSTRUCTIONS=1. Call list_templates first to learn the required parameters, 2. Collect every required parameter from the user - never invent names, addresses, amounts or dates, 3. Pass language (e.g. "hi") to draft in a translated language where the template supports it, 4. Render, 5. Give the user the draft together with its checklist, 6. Run verify_all_citations over the draft if it cites any authority
-    INPUT_DESCRIPTION=template_key (string, required): key from list_templates, e.g. "ni_138_notice". parameters (object, required): the facts, matching the template's required and optional parameters. List parameters such as facts, demands and reliefs take arrays of strings. language (string, optional): one of the codes listed by get_document_languages (e.g. "en", "hi") - the static text of the template is rendered in that language; parameters you pass are used verbatim.
-    OUTPUT_DESCRIPTION=Dictionary with status, the rendered draft, the template's procedural checklist, governing authority, next steps, and a reminder that the draft is unsigned and unserved
-    EXAMPLES=draft_document("rti_application", {"public_authority": "Municipal Corporation of Greater Mumbai", "authority_address": "...", "application_date": "2026-08-02", "information_sought": ["Copy of building plan approval for CTS 123"], "applicant_name": "...", "applicant_address": "..."}), draft_document("ni_138_notice", {"sender_name": "...", "sender_address": "...", "notice_date": "2026-08-16", "recipient_name": "...", "recipient_address": "...", "client_name": "...", "client_address": "...", "liability_description": "...", "cheque_number": "123456", "cheque_date": "2026-07-01", "cheque_amount": 100000, "amount_in_words": "One Lakh Only", "drawee_bank": "...", "drawee_branch": "...", "payee_bank": "...", "payee_branch": "...", "presentation_date": "2026-07-02", "dishonour_reason": "Insufficient funds", "dishonour_memo_date": "2026-07-03", "dishonour_date": "2026-07-03"}, language="hi")
+    INSTRUCTIONS=1. Call list_templates first to learn the required parameters, 2. Collect every required parameter from the user - never invent names, addresses, amounts or dates, 3. Pass language (e.g. "hi") to draft in a translated language where the template supports it, 4. Optionally pass branding (advocate_name, enrollment, firm_name, office_address, mobile, email, logo_base64, separator_style, date_format) for letterhead formatting, 5. Render, 6. Give the user the draft together with its checklist, 7. If auto_verify is True, the draft is automatically swept for citations
+    INPUT_DESCRIPTION=template_key (string, required): key from list_templates, e.g. "notice_ni138". parameters (object, required): the facts, matching the template's required and optional parameters. List parameters such as facts, demands and reliefs take arrays of strings. language (string, optional): one of the codes listed by get_document_languages (e.g. "en", "hi") - the static text of the template is rendered in that language; parameters you pass are used verbatim. auto_verify (bool, optional, default False): if True, runs verify_all_citations on the rendered draft. branding (object, optional): advocate branding for letterhead - advocate_name, enrollment, firm_name, office_address, mobile, email, logo_base64, separator_style, date_format.
+    OUTPUT_DESCRIPTION=Dictionary with status, the rendered draft, the template's procedural checklist, governing authority, next steps, verification result (if auto_verify), and a reminder that the draft is unsigned and unserved
+    EXAMPLES=draft_document("rti_application", {"public_authority": "Municipal Corporation of Greater Mumbai", "authority_address": "...", "application_date": "2026-08-02", "information_sought": ["Copy of building plan approval for CTS 123"], "applicant_name": "...", "applicant_address": "..."}), draft_document("notice_ni138", {"sender_name": "...", "sender_address": "...", "notice_date": "2026-08-16", "recipient_name": "...", "recipient_address": "...", "client_name": "...", "client_address": "...", "liability_description": "...", "cheque_number": "123456", "cheque_date": "2026-07-01", "cheque_amount": 100000, "amount_in_words": "One Lakh Only", "drawee_bank": "...", "drawee_branch": "...", "payee_bank": "...", "payee_branch": "...", "presentation_date": "2026-07-02", "dishonour_reason": "Insufficient funds", "dishonour_memo_date": "2026-07-03", "dishonour_date": "2026-07-03"}, language="hi", auto_verify=True, branding={"advocate_name": "Bhushan Sahane", "enrollment": "MAH/1234/2020", "firm_name": "Bhushan Sahane & Associates", "office_address": "504, FcyMax-3, Udyog Vihar, Sector-3, Gurgaon, Haryana-122002", "mobile": "8552019001", "separator_style": "equals", "date_format": "DD@MM@YYYY"})
     PREREQUISITES=None - fully offline
-    RELATED_TOOLS=list_templates for parameters; get_document_languages for the language codes a template supports; review_draft to check the result; compute_cheque_bounce_timeline before a s.138 notice
+    RELATED_TOOLS=list_templates for parameters; get_document_languages for the language codes a template supports; review_draft to check the result; verify_all_citations for manual citation sweep; compute_cheque_bounce_timeline before a s.138 notice
 
     CPU-bound operation - uses def for template rendering.
 
@@ -190,9 +195,11 @@ def draft_document(
         template_key: Which template to render.
         parameters: The facts to render into it.
         language: Optional language code for the static template text.
+        auto_verify: If True, runs verify_all_citations on the rendered draft.
+        branding: Optional advocate branding for letterhead formatting.
 
     Returns:
-        Dict with the rendered draft and its checklist.
+        Dict with the rendered draft, its checklist, and verification result (if auto_verify).
     """
     try:
         manifest = load_manifest()
@@ -229,6 +236,14 @@ def draft_document(
                 ),
             }
 
+        # Default branding from manifest if not provided
+        default_branding = entry.get("branding", {})
+        if branding:
+            # User-provided branding overrides defaults
+            final_branding = {**default_branding, **branding}
+        else:
+            final_branding = default_branding
+
         required = entry.get("required", [])
         missing = [
             name
@@ -259,6 +274,23 @@ def draft_document(
         context: Dict[str, Any] = {name: None for name in entry.get("optional", [])}
         context.update(parameters)
         context["language"] = language
+        context["branding"] = final_branding
+
+        # Ensure branding has required defaults
+        branding_defaults = {
+            "advocate_name": "Advocate Name",
+            "enrollment": "",
+            "firm_name": "",
+            "office_address": "",
+            "mobile": "",
+            "email": "",
+            "logo_base64": "",
+            "separator_style": "equals",
+            "date_format": "DD@MM@YYYY",
+        }
+        for key, default_val in branding_defaults.items():
+            if key not in final_branding:
+                final_branding[key] = default_val
 
         unknown = set(parameters) - set(required) - set(entry.get("optional", []))
         if unknown:
@@ -272,6 +304,21 @@ def draft_document(
 
         logger.info(f"Drafted document from template '{template_key}'")
 
+        # Auto-verify citations if requested
+        verification_result = None
+        if auto_verify and rendered.strip():
+            try:
+                verification_result = asyncio.run(
+                    verify_all_citations(rendered, max_citations=25)
+                )
+            except Exception as e:
+                logger.warning(f"Auto-verification failed: {e}")
+                verification_result = {
+                    "status": "error",
+                    "operation": "verify_all_citations",
+                    "error": str(e),
+                }
+
         return {
             "status": "success",
             "operation": "draft_document",
@@ -283,10 +330,17 @@ def draft_document(
             "checklist": entry.get("checklist", []),
             "authority": entry.get("authority"),
             "next_steps": entry.get("next_steps", []),
+            "verification_result": verification_result,
             "message": (
                 f"Drafted '{entry['title']}' in {language}. Present the checklist "
                 "to the user alongside the draft. This document is unsigned and "
                 "unserved - this server does not send, file or serve anything."
+                + (
+                    f" Auto-verification: {verification_result['verification_summary']['verified']}/{verification_result['verification_summary']['total']} citations verified (confidence: {verification_result['verification_summary']['avg_confidence']:.0%}). "
+                    if verification_result
+                    and verification_result.get("status") == "success"
+                    else " Auto-verification disabled or failed. "
+                )
             ),
             "disclaimer": (
                 "A template gets the form right; it cannot tell whether this is "

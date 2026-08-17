@@ -1,0 +1,68 @@
+{# General Legal Notice #}
+{% extends 'base_structure.j2' %}
+{% import 'macros.j2' as macros with context %}
+
+{% block document_title %}
+{{ macros.notice_header("js.kw fouksn fnaMksjdj", branding) }}
+{% endblock %}
+
+{% block date_line %}
+{{ macros.date_line(notice_date, branding) }}
+{% endblock %}
+
+{% block notice_heading %}
+{{ macros.notice_title() }}
+{% endblock %}
+
+{% block recipient_block %}
+izfr]
+{{ macros.to_block(recipient_name, recipient_address, subject) }}
+{% endblock %}
+
+{% block subject_line %}
+{{ macros.notice_title() }} {{ macros.date_line(notice_date, branding) }} {{ macros.notice_title() }} {{ subject }}
+{% endblock %}
+
+{% block instruction_block %}
+vkeps oj ueqn i{kdkj {{ branding.advocate_name }}; {{ branding.enrollment }}; {% if branding.firm_name %}{{ branding.firm_name }}{% endif %} {% if branding.office_address %}{{ branding.office_address }}{% endif %} le{k fnyYs ;k ekfgrho:u o nk[kfoysY;k dkxni=kao:u vkf.k le{k lkafxrysizek.ks vki.kkl uksVhl ns.;kr ;srs dh]
+{% endblock %}
+
+{% block body %}
+{% for i, fact in enumerate(facts) %}
+{{ macros.numbered_para(i + 1, fact) }}
+{% endfor %}
+
+{{ macros.numbered_para(facts | length + 1, "That your aforesaid acts and omissions constitute " ~ legal_basis ~ ", and my client has suffered loss and injury thereby.") }}
+
+{{ macros.numbered_para(facts | length + 2, "That my client has been constrained to issue this notice on account of your failure to redress the grievance despite " ~ (prior_attempts | default('repeated requests')) ~ ".") }}
+
+I therefore call upon you, through this notice, to:
+
+{% for i, demand in enumerate(demands) %}
+   {{ macros.numbered_para(i + 1, demand) }}
+{% endfor %}
+
+within {{ compliance_days }} days from the date of receipt of this notice.
+{% endblock %}
+
+{% block prayer %}
+A copy of this notice is retained in my office for further necessary action.
+{% endblock %}
+
+{% block verification %}
+vls dj.ks rqeP;kdMwu pqdY;kl vkeps i{kdkj rqeps fo:/n dk;nsf”kj dkjokbZ d:u
+Qkjdr ?ksrhy vkf.k eqykpk rkck ns[khy ?ksrhy ;kph rqEgh
+xkaHkhZ;kus uksan ?;koh-
+lnj uksVhlhpk [kpZ jDde :Ik;s 10]000@& gk rqepsoj Bso.;kr
+vkysyk vlwu] R;kph ,d izr rqEgkal jft- iks'Vkus ikBowu uDdy vkeps
+dk;kZy;kr iqjkO;kdkeh jk[kwu Bsoyh vkgs-
+dGko]s gh uksVhl
+ukf”kd
+fnukad {{ macros.date_format(notice_date, branding.date_format) }} vWM- {{ branding.advocate_name }}
+Jh- {{ branding.advocate_name }} {% if branding.enrollment %}{{ branding.enrollment }}{% endif %}
+i{kdkj
+{% endblock %}
+
+{% block footer %}
+{% include 'base_footer.j2' with context %}
+{% endblock %}

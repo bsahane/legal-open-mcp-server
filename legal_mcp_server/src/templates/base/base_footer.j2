@@ -1,0 +1,37 @@
+{# Base footer template for all legal documents #}
+{% import 'macros.j2' as macros with context %}
+
+{% set enclosures = enclosures | default([]) %}
+{% set verification_place = verification_place | default('') %}
+{% set verification_date = verification_date | default('') %}
+{% set copy_to_client_name = copy_to_client_name | default('') %}
+
+{# Copy to client #}
+{% if copy_to_client_name %}
+lnj uksVhlhph ,d uDdy izr iqjkO;kdkeh vkepsdMs Bsoqu]
+eqGizr rqEgkl jft”Vj iks”Vkus ikBfor vkgksr-
+gh ukVs hl
+{% endif %}
+
+{# Enclosures #}
+{% if enclosures %}
+Enclosures:
+{% for item in enclosures %}
+- {{ item }}
+{% endfor %}
+{% endif %}
+
+{# Verification / Signature block #}
+{% if verification_place and verification_date %}
+vls dj.ks rqeP;kdMwu pqdY;kl vkeps i{kdkj rqeps fo:/n dk;nsf”kj dkjokbZ d:u
+Qkjdr ?ksrhy vkf.k eqykpk rkck ns[khy ?ksrhy ;kph rqEgh
+xkaHkhZ;kus uksan ?;koh-
+lnj uksVhlhpk [kpZ jDde :Ik;s 10]000@& gk rqepsoj Bso.;kr
+vkysyk vlwu] R;kph ,d izr rqEgkal jft- iks'Vkus ikBowu uDdy vkeps
+dk;kZy;kr iqjkO;kdkeh jk[kwu Bsoyh vkgs-
+dGko]s gh uksVhl
+ukf”kd
+fnukad {{ macros.date_format(verification_date, branding.get('date_format', 'DD@MM@YYYY')) }} vWM- {{ branding.get('advocate_name', '') }}
+Jh- {{ branding.get('advocate_name', '') }} {% if branding.get('enrollment') %}{{ branding.get('enrollment') }}{% endif %}
+i{kdkj
+{% endif %}

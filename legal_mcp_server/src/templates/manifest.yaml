@@ -638,3 +638,204 @@ templates:
       - File the application with an affidavit in support and the plaint or cause title
       - Serve the application on the opposite party (or seek ex parte ad-interim relief if urgency justifies)
       - Diarise the returnable date fixed by the court for the respondent's reply
+
+  - key: notice_ni138
+    file: notice_ni138.j2
+    title: Statutory Notice under Section 138 NI Act (Cheque Dishonour)
+    category: notice
+    description: >
+      Statutory demand notice to the drawer of a dishonoured cheque under
+      Section 138 read with Section 142 of the Negotiable Instruments Act, 1881.
+      Must be issued within 30 days of receiving the dishonour memo.
+      Matches advocate Bhushan Sahane's format with letterhead, separators,
+      and bilingual support. Available in English and Hindi.
+    languages:
+      - en
+      - hi
+    required:
+      - sender_name
+      - sender_address
+      - notice_date
+      - recipient_name
+      - recipient_address
+      - client_name
+      - client_address
+      - liability_description
+      - cheque_number
+      - cheque_date
+      - cheque_amount
+      - amount_in_words
+      - drawee_bank
+      - drawee_branch
+      - payee_bank
+      - payee_branch
+      - presentation_date
+      - dishonour_reason
+      - dishonour_memo_date
+      - dishonour_date
+    optional:
+      - reference
+      - sender_phone
+      - sender_email
+      - drawer_account
+      - additional_facts
+      - advocate_name
+      - advocate_enrolment
+      - branding
+    branding_params:
+      - advocate_name
+      - enrollment
+      - firm_name
+      - office_address
+      - mobile
+      - email
+      - logo_base64
+      - separator_style
+      - date_format
+    checklist:
+      - Issued within 30 days of the payee receiving the dishonour memo (proviso (b) to s.138) - NOT extendable
+      - Demand is for the cheque amount exactly, not the amount plus interest or costs
+      - Fifteen clear days allowed for payment (proviso (c) to s.138)
+      - Sent by registered post AD to the drawer's correct address; retain the receipt and tracking
+      - Underlying debt is legally enforceable and not itself time-barred
+      - Cheque was presented within its validity period
+    authority: sections 138 and 142, Negotiable Instruments Act, 1881
+    next_steps:
+      - Diarise the 15-day payment window from the date of service
+      - Complaint may be filed only after that window expires, and within one month thereafter (s.142(b))
+      - File before the court where the payee's collecting bank branch is situated (s.142(2)(a))
+
+  - key: notice_general
+    file: notice_general.j2
+    title: General Legal Notice
+    category: notice
+    description: >
+      All-purpose pre-litigation demand notice setting out facts, legal basis
+      and demands, with a compliance period. Matches advocate letterhead format
+      with separators and bilingual support. Available in English and Hindi.
+    languages:
+      - en
+      - hi
+    required:
+      - sender_name
+      - sender_address
+      - notice_date
+      - recipient_name
+      - recipient_address
+      - subject
+      - client_name
+      - client_address
+      - facts
+      - legal_basis
+      - demands
+      - compliance_days
+      - proposed_proceedings
+    optional:
+      - reference
+      - sender_phone
+      - sender_email
+      - send_by_email
+      - prior_attempts
+      - advocate_name
+      - advocate_enrolment
+      - branding
+    branding_params:
+      - advocate_name
+      - enrollment
+      - firm_name
+      - office_address
+      - mobile
+      - email
+      - logo_base64
+      - separator_style
+      - date_format
+    checklist:
+      - Facts are pleaded chronologically and are capable of proof
+      - Legal basis identifies the provision or duty breached
+      - Demands are specific, quantified and capable of compliance
+      - Compliance period is reasonable for what is demanded
+      - Claim is within limitation - compute it before sending
+      - Where the addressee is a government body, section 80 CPC requires two months' notice
+    authority: general; see section 80 CPC where the Government is the addressee
+
+  - key: notice_restitution
+    file: notice_restitution.j2
+    title: Notice for Restitution of Conjugal Rights (Section 9 HMA)
+    category: notice
+    description: >
+      Legal notice for restitution of conjugal rights under Section 9 of the
+      Hindu Marriage Act, 1955. Matches advocate letterhead format with
+      separators and bilingual support. Available in English and Hindi.
+    languages:
+      - en
+      - hi
+    required:
+      - notice_date
+      - petitioner_name
+      - petitioner_address
+      - respondent_name
+      - respondent_address
+      - marriage_date
+      - marriage_place
+      - marriage_place_details
+      - petitioner_advocate
+      - respondent_advocate
+      - facts
+    optional:
+      - branding
+    branding_params:
+      - advocate_name
+      - enrollment
+      - firm_name
+      - office_address
+      - mobile
+      - email
+      - logo_base64
+      - separator_style
+      - date_format
+    checklist:
+      - Marriage is valid under HMA (not void/voidable)
+      - Petitioner has not committed any matrimonial offence
+      - Respondent has withdrawn from petitioner's society without reasonable excuse
+      - Notice issued within reasonable time
+      - Sent by registered post AD; retain receipt
+    authority: Section 9, Hindu Marriage Act, 1955
+
+  - key: notice_hmp13
+    file: notice_hmp13.j2
+    title: Notice under Section 13(1) Haryana Municipal Act
+    category: notice
+    description: >
+      Notice under Section 13(1) of the Haryana Municipal Act / relevant
+      Municipal Act for building/construction violations. Matches advocate
+      letterhead format with separators and bilingual support. Available
+      in English and Hindi.
+    languages:
+      - en
+      - hi
+    required:
+      - notice_date
+      - violation_date
+      - recipient_name
+      - recipient_address
+      - client_name
+      - client_address
+      - facts
+    optional:
+      - branding
+    branding_params:
+      - advocate_name
+      - enrollment
+      - firm_name
+      - office_address
+      - mobile
+      - email
+      - logo_base64
+      - separator_style
+      - date_format
+    checklist:
+      - Violation is within municipal jurisdiction
+      - Notice specifies the exact violation and provision
+      - Reasonable time given for compliance
+      - Sent by registered post AD; retain receipt
+    authority: Section 13(1), Haryana Municipal Act / relevant Municipal Act
