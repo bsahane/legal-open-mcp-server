@@ -105,14 +105,13 @@ _TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "hi": "मेरे मुवक्किल की आदेशों के अनुसार और उनकी ओर से",
     },
     "hereinafter_client": {
-        'en': '(hereinafter "my client")',
-        'hi': '(इसके बाद "मेरा मुवक्किल")',
+        "en": '(hereinafter "my client")',
+        "hi": '(इसके बाद "मेरा मुवक्किल")',
     },
     "that_you_are_acquainted": {
         "en": "That you are well acquainted with my client and the "
         "transactions between you and my client.",
-        "hi": "यह कि आप मेरे मुवक्किल से और आपके बीच के लेन-देन से "
-        "अच्छी तरह से परिचित हैं।",
+        "hi": "यह कि आप मेरे मुवक्किल से और आपके बीच के लेन-देन से अच्छी तरह से परिचित हैं।",
     },
     "that_legally_liable_to_pay": {
         "en": "That you were and continue to be legally liable to pay a "
@@ -144,11 +143,11 @@ _TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "नगदिकरण के लिए प्रस्तुत किया।",
     },
     "returned_unpaid": {
-        'en': 'That the said cheque was returned unpaid by the drawee bank '
+        "en": "That the said cheque was returned unpaid by the drawee bank "
         'with the endorsement "{{ dishonour_reason }}", and the said '
         "return memo dated {{ dishonour_memo_date }} was received by my "
         "client on {{ dishonour_date }}.",
-        'hi': 'यह कि उक्त धनादेश को प्राप्तकर्ता बैंक द्वारा '
+        "hi": "यह कि उक्त धनादेश को प्राप्तकर्ता बैंक द्वारा "
         '"{{ dishonour_reason }}" कहकर बिना भुगतान वापस कर दिया गया, '
         "और तारीख {{ dishonour_memo_date }} का वह वापसी मेमो मेरे "
         "मुवक्किल को {{ dishonour_date }} को प्राप्त हुआ।",
@@ -292,8 +291,7 @@ _TRANSLATIONS: Dict[str, Dict[str, str]] = {
     "deficiency_in_service": {
         "en": "deficiency in service within the meaning of Section 2(11) of "
         "the Consumer Protection Act, 2019",
-        "hi": "सेवा में कमी उपभोक्ता सुरक्षा अधिनियम, 2019 की धारा 2(11) "
-        "के अर्थ में",
+        "hi": "सेवा में कमी उपभोक्ता सुरक्षा अधिनियम, 2019 की धारा 2(11) के अर्थ में",
     },
     "defective_goods_unfair_trade": {
         "en": "sale of defective goods and unfair trade practice within the "
@@ -378,8 +376,7 @@ _TRANSLATIONS: Dict[str, Dict[str, str]] = {
     "cause_of_action_arises": {
         "en": "The cause of action for this application arose within the "
         "jurisdiction of this Hon'ble Court on {{ date }}.",
-        "hi": "इस आवेदन का कारण इस आदरणीय अदालत के क्षेत्राधिकार "
-        "में {{ date }} को उत्पन्न हुआ।",
+        "hi": "इस आवेदन का कारण इस आदरणीय अदालत के क्षेत्राधिकार में {{ date }} को उत्पन्न हुआ।",
     },
 }
 

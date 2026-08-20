@@ -86,9 +86,10 @@ def _write_parquet(rows: List[Dict[str, Any]], target: Path) -> None:
                 else:
                     escaped = str(value).replace("'", "''")
                     literals.append(f"'{escaped}'")
-            selects.append("SELECT " + ", ".join(
-                f"{lit} AS {col}" for lit, col in zip(literals, columns)
-            ))
+            selects.append(
+                "SELECT "
+                + ", ".join(f"{lit} AS {col}" for lit, col in zip(literals, columns))
+            )
         con.execute(
             f"COPY ({' UNION ALL '.join(selects)}) TO '{target}' (FORMAT PARQUET)"
         )
@@ -99,7 +100,9 @@ def _write_parquet(rows: List[Dict[str, Any]], target: Path) -> None:
 @pytest.fixture
 def corpus(tmp_path: Path):
     """A synced-looking local corpus with one SC year and one HC bench."""
-    _write_parquet(SC_ROWS, tmp_path / "sc" / "metadata" / "year=2024" / "metadata.parquet")
+    _write_parquet(
+        SC_ROWS, tmp_path / "sc" / "metadata" / "year=2024" / "metadata.parquet"
+    )
     _write_parquet(
         HC_ROWS,
         tmp_path
@@ -493,17 +496,21 @@ class TestToolWrappers:
             url="https://example.invalid/x.pdf",
         )
         with patch.object(corpus, "get_judgment", return_value=judgment):
-            result = await research_tools.search_within_judgment("sc:2024:x", "arbitration")
+            result = await research_tools.search_within_judgment(
+                "sc:2024:x", "arbitration"
+            )
 
         assert result["match_count"] == 0
         assert "try a synonym" in result["message"]
 
     @pytest.mark.asyncio
     async def test_search_within_judgment_validates_inputs(self, corpus):
-        assert (await research_tools.search_within_judgment("", "x"))["status"] == "error"
-        assert (
-            await research_tools.search_within_judgment("sc:2024:x", "  ")
-        )["status"] == "error"
+        assert (await research_tools.search_within_judgment("", "x"))[
+            "status"
+        ] == "error"
+        assert (await research_tools.search_within_judgment("sc:2024:x", "  "))[
+            "status"
+        ] == "error"
 
     @pytest.mark.asyncio
     async def test_sync_tool_defaults_to_sc_plus_default_high_court(self, corpus):
@@ -511,7 +518,13 @@ class TestToolWrappers:
 
         async def fake_sync(courts, from_year, to_year, force):
             captured["courts"] = courts
-            return {"courts": {}, "files": 0, "bytes": 0, "skipped": 0, "megabytes": 0.0}
+            return {
+                "courts": {},
+                "files": 0,
+                "bytes": 0,
+                "skipped": 0,
+                "megabytes": 0.0,
+            }
 
         with patch.object(corpus, "sync", side_effect=fake_sync):
             result = await research_tools.sync_case_law()
@@ -526,7 +539,13 @@ class TestToolWrappers:
 
         async def fake_sync(courts, from_year, to_year, force):
             captured.update(courts=courts, from_year=from_year, to_year=to_year)
-            return {"courts": {}, "files": 2, "bytes": 10, "skipped": 0, "megabytes": 0.1}
+            return {
+                "courts": {},
+                "files": 2,
+                "bytes": 10,
+                "skipped": 0,
+                "megabytes": 0.1,
+            }
 
         with patch.object(corpus, "sync", side_effect=fake_sync):
             result = await research_tools.sync_case_law(
@@ -546,3 +565,54 @@ class TestToolWrappers:
             result = await research_tools.sync_case_law(courts=["Nowhere"])
 
         assert result["status"] == "unavailable"
+
+
+class TestFullTextIndex:
+    """BM25 index: buildable, transparently used, and honestly reported stale."""
+
+    def _build(self, corpus):
+        try:
+            return corpus.build_fts_index()
+        except Exception as exc:  # noqa: BLE001 - extension may be unavailable
+            pytest.skip(f"DuckDB FTS extension not usable here: {exc}")
+
+    def test_fts_unavailable_before_build(self, corpus):
+        assert corpus._fts_available() is False
+
+    def test_build_index_reports_rows(self, corpus):
+        result = self._build(corpus)
+        assert result["status"] == "success"
+        assert result["rebuilt"] is True
+        assert result["rows"] == 3  # 2 SC + 1 HC fixture rows
+        assert corpus._fts_available() is True
+        assert corpus._fts_row_count() == 3
+
+    def test_rebuild_without_force_is_a_noop(self, corpus):
+        self._build(corpus)
+        result = corpus.build_fts_index()
+        assert result["rebuilt"] is False
+        assert result["rows"] == 3
+
+    def test_stale_after_newer_metadata(self, corpus):
+        self._build(corpus)
+        assert corpus._fts_available() is True
+        fresh = corpus.sc_metadata_dir / "year=2025" / "metadata.parquet"
+        _write_parquet(SC_ROWS, fresh)
+        assert corpus._fts_available() is False
+
+    @pytest.mark.asyncio
+    async def test_fts_search_matches_like_search(self, corpus):
+        self._build(corpus)
+        fts_hits = await corpus.search("State Bihar", court="Supreme Court")
+        assert len(fts_hits) == 2
+        assert {h.doc_id for h in fts_hits} == {
+            "sc:2024:2024_10_108_125",
+            "sc:2024:2024_5_629_729",
+        }
+
+    @pytest.mark.asyncio
+    async def test_fts_search_honours_and_semantics(self, corpus):
+        self._build(corpus)
+        # Both terms must appear; only VIJAY SINGH carries "Appeal".
+        hits = await corpus.search("Appeal Bihar", court="Supreme Court")
+        assert [h.doc_id for h in hits] == ["sc:2024:2024_10_108_125"]

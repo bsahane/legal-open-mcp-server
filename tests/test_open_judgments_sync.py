@@ -266,10 +266,13 @@ class TestJudgmentRetrieval:
         patcher, _ = _patch_httpx(handler)
         c = open_judgments.OpenJudgmentsClient(data_path=str(tmp_path))
 
-        with patcher, patch.object(
-            open_judgments.OpenJudgmentsClient,
-            "_extract_pdf_text",
-            staticmethod(lambda _p: "JUDGMENT TEXT"),
+        with (
+            patcher,
+            patch.object(
+                open_judgments.OpenJudgmentsClient,
+                "_extract_pdf_text",
+                staticmethod(lambda _p: "JUDGMENT TEXT"),
+            ),
         ):
             first = await c.get_judgment("sc:2024:2024_10_108_125")
             second = await c.get_judgment("sc:2024:2024_10_108_125")
@@ -305,10 +308,13 @@ class TestJudgmentRetrieval:
         patcher, _ = _patch_httpx(handler)
         c = open_judgments.OpenJudgmentsClient(data_path=str(tmp_path))
 
-        with patcher, patch.object(
-            open_judgments.OpenJudgmentsClient,
-            "_extract_pdf_text",
-            staticmethod(lambda _p: "text"),
+        with (
+            patcher,
+            patch.object(
+                open_judgments.OpenJudgmentsClient,
+                "_extract_pdf_text",
+                staticmethod(lambda _p: "text"),
+            ),
         ):
             await c.get_judgment("hc:27_1:hcbgoa:2024:FILE.pdf")
 
@@ -389,7 +395,12 @@ class TestPaidBackendDispatch:
     async def test_search_routes_to_indian_kanoon(self):
         fake = Mock()
         fake.search = AsyncMock(
-            return_value={"results": [{"doc_id": 1}], "found": "1", "query": "q", "page": 0}
+            return_value={
+                "results": [{"doc_id": 1}],
+                "found": "1",
+                "query": "q",
+                "page": 0,
+            }
         )
         fake.spend_report = Mock(return_value={"spent_inr": 0.5})
 

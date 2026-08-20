@@ -551,7 +551,9 @@ class Settings(BaseSettings):
             return False
         if self.CASE_LAW_SOURCE == "open_data":
             return True
-        return bool(self.INDIAN_KANOON_API_KEY) and self.INDIAN_KANOON_DAILY_BUDGET_INR > 0
+        return (
+            bool(self.INDIAN_KANOON_API_KEY) and self.INDIAN_KANOON_DAILY_BUDGET_INR > 0
+        )
 
     @cached_property
     def semantic_search_available(self) -> bool:
@@ -623,7 +625,10 @@ def validate_legal_config(settings: Settings) -> None:
             "Use 'local' for offline embeddings or 'disabled' for full-text search only."
         )
 
-    if settings.CASE_LAW_SOURCE == "indian_kanoon" and not settings.INDIAN_KANOON_API_KEY:
+    if (
+        settings.CASE_LAW_SOURCE == "indian_kanoon"
+        and not settings.INDIAN_KANOON_API_KEY
+    ):
         raise ValueError(
             "CASE_LAW_SOURCE='indian_kanoon' requires INDIAN_KANOON_API_KEY. "
             "Use the default CASE_LAW_SOURCE='open_data' for free case law "

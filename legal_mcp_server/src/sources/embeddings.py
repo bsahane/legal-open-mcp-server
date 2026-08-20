@@ -20,6 +20,7 @@ clear, actionable error rather than an import failure at server start.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from functools import lru_cache
 from typing import List, Optional
 
 from legal_mcp_server.src.settings import settings
@@ -110,11 +111,25 @@ class LocalProvider(EmbeddingProvider):
         logger.info(f"Local embedding model loaded: {model_name}")
 
     async def embed_documents(self, texts: List[str]) -> List[List[float]]:
-        """Embed passages on the local CPU."""
-        return [list(map(float, v)) for v in self._model.embed(texts)]
+        """Embed passages on the local CPU.
+
+        Documents are embedded in parallel batches of 256, which is the
+        sweet spot for fastembed's internal thread pool on typical hardware.
+        """
+        vectors = self._model.embed(texts, batch_size=256, parallel=0, lazy_load=True)
+        return [list(map(float, v)) for v in vectors]
 
     async def embed_query(self, text: str) -> List[float]:
-        """Embed a query on the local CPU."""
+        """Embed a query on the local CPU, caching repeats.
+
+        Queries are short and frequently repeated (the same matter, the same
+        clause, asked several ways), so memoising them avoids re-running the
+        model on the same text.
+        """
+        return self._embed_query_cached(text)
+
+    @lru_cache(maxsize=1024)
+    def _embed_query_cached(self, text: str) -> List[float]:
         return list(map(float, next(iter(self._model.embed([text])))))
 
 

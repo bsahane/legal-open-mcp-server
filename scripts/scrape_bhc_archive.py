@@ -82,7 +82,9 @@ class ArchiveClient:
             timeout=REQUEST_TIMEOUT,
             follow_redirects=True,
             verify=tls,
-            headers={"User-Agent": "legal-mcp-scraper (research; contact rghc_bombay[at]mh-hc.nic.in)"},
+            headers={
+                "User-Agent": "legal-mcp-scraper (research; contact rghc_bombay[at]mh-hc.nic.in)"
+            },
         )
 
     def get(self, url: str) -> Optional[str]:
@@ -153,7 +155,11 @@ def parse_bhcr_page(
         title = _clean(link_text)
 
         trailing_text = _clean(trailing)
-        citation_match = re.search(r"(\d{4}-\d{4}\s*\(\d+\)\s*BHCR\s+[A-Z]?\d+[A-Z]?)", trailing_text, re.IGNORECASE)
+        citation_match = re.search(
+            r"(\d{4}-\d{4}\s*\(\d+\)\s*BHCR\s+[A-Z]?\d+[A-Z]?)",
+            trailing_text,
+            re.IGNORECASE,
+        )
         citation = citation_match.group(1) if citation_match else volume_label
         description = trailing_text.replace(citation, "").strip()
 
@@ -240,9 +246,7 @@ def parse_simple_page(
             )
         )
 
-    for href in re.findall(
-        r'<a\s+[^>]*href="([^"]+\.htm)"[^>]*>', html, re.IGNORECASE
-    ):
+    for href in re.findall(r'<a\s+[^>]*href="([^"]+\.htm)"[^>]*>', html, re.IGNORECASE):
         if series in ("diwani", "manuscript") and href not in next_pages:
             next_pages.append(_abs(base_url, href))
 
@@ -292,9 +296,7 @@ def download_pdfs(client: ArchiveClient, cases: List[Case]) -> None:
             continue
         data = html_or_pdf.encode("utf-8")
         if not data.startswith(b"%PDF"):
-            print(
-                f"  ! not a PDF ({len(data)}B): {case.source_url}", file=sys.stderr
-            )
+            print(f"  ! not a PDF ({len(data)}B): {case.source_url}", file=sys.stderr)
             continue
         target.write_bytes(data)
         print(f"  - {case.pdf_name}")
@@ -375,7 +377,9 @@ def harvest_diwani(client: ArchiveClient, download: bool) -> List[Case]:
             crawl(
                 client,
                 list_url,
-                lambda html, url: parse_simple_page(html, url, "diwani", "diwani", year),
+                lambda html, url: parse_simple_page(
+                    html, url, "diwani", "diwani", year
+                ),
                 download=download,
             )
         )
@@ -388,7 +392,9 @@ def harvest_manuscript(client: ArchiveClient, download: bool) -> List[Case]:
     cases = crawl(
         client,
         index_url,
-        lambda html, url: parse_simple_page(html, url, "manuscript", "manuscript", 1864),
+        lambda html, url: parse_simple_page(
+            html, url, "manuscript", "manuscript", 1864
+        ),
         download=download,
     )
     return cases

@@ -10,8 +10,12 @@ The default corpus is the free AWS Open Data release of Indian Supreme Court
 and High Court judgments (CC-BY-4.0): no API key, no per-query cost.
 """
 
+import asyncio
 from typing import Any, Dict, List, Optional
 
+from fastmcp import Context
+
+from legal_mcp_server.src.cache import get_cached, set_cached
 from legal_mcp_server.src.domain import citations as cit
 from legal_mcp_server.src.settings import settings
 from legal_mcp_server.src.sources import case_law
@@ -32,6 +36,11 @@ CONFIDENCE_SCORES = {
     VERDICT_AMBIGUOUS: 0.5,
     VERDICT_UNCHECKED: 0.0,
 }
+
+# Serialises the dual-source backend switch in `_verify_case_citation_dual`.
+# `case_law` holds process-global backend state, so concurrent fallbacks would
+# otherwise clobber each other and check citations against the wrong corpus.
+_backend_switch_lock = asyncio.Lock()
 
 
 def _unavailable(operation: str, error: Exception) -> Dict[str, Any]:
@@ -92,6 +101,21 @@ async def search_case_law(
         if not query or not query.strip():
             raise ValueError("query must be a non-empty string")
 
+        cached = await get_cached(
+            query.strip(), court, from_date, to_date, judge, limit, page
+        )
+        if cached is not None:
+            cached["cached"] = True
+            cached["message"] = (
+                f"Found {len(cached.get('results', []))} judgments (served from "
+                "the 24-hour disk cache; the live corpus is re-queried on the "
+                "next miss). Open the relevant ones with get_judgment before "
+                "relying on them; metadata snippets are not a sufficient basis "
+                "for a citation."
+            )
+            logger.info(f"Case law search served from cache for: {query.strip()}")
+            return cached
+
         payload = await case_law.search(
             query=query.strip(),
             court=court,
@@ -114,6 +138,7 @@ async def search_case_law(
             "query_sent": payload.get("query", query),
             "backend": payload["backend"],
             "cost": payload["cost"],
+            "cached": False,
             "message": (
                 f"Found {len(results)} judgments. Open the relevant ones with "
                 "get_judgment before relying on them; metadata snippets are not a "
@@ -123,6 +148,9 @@ async def search_case_law(
         for key in ("attribution", "scope_note", "spend", "page"):
             if key in payload:
                 response[key] = payload[key]
+        await set_cached(
+            response, query.strip(), court, from_date, to_date, judge, limit, page
+        )
         return response
 
     except SourceUnavailable as e:
@@ -478,25 +506,28 @@ async def _verify_case_citation_dual(
     # If primary failed and fallback enabled, try Indian Kanoon
     if use_fallback and max_fallback_budget > 0:
         try:
-            # Temporarily switch to indian_kanoon backend
-            original_backend = case_law.active_backend()
-            if original_backend != "indian_kanoon" and settings.INDIAN_KANOON_API_KEY:
-                case_law.set_backend("indian_kanoon")
-                try:
-                    fallback_result = await _verify_case_citation(citation)
-                    fallback_result["fallback_used"] = True
-                    fallback_result["primary_backend"] = original_backend
-                    fallback_result["fallback_backend"] = "indian_kanoon"
-                    return fallback_result
-                finally:
-                    case_law.set_backend(original_backend)
+            # The backend override is process-global state; serialise the
+            # switch so concurrent verifications never race it.
+            async with _backend_switch_lock:
+                original_backend = case_law.active_backend()
+                if (
+                    original_backend != "indian_kanoon"
+                    and settings.INDIAN_KANOON_API_KEY
+                ):
+                    case_law.set_backend("indian_kanoon")
+                    try:
+                        fallback_result = await _verify_case_citation(citation)
+                        fallback_result["fallback_used"] = True
+                        fallback_result["primary_backend"] = original_backend
+                        fallback_result["fallback_backend"] = "indian_kanoon"
+                        return fallback_result
+                    finally:
+                        case_law.reset_backend()
         except Exception as e:
             logger.warning(f"Dual-source fallback failed: {e}")
 
     # Return primary result with confidence
-    primary_result["confidence"] = CONFIDENCE_SCORES.get(
-        primary_result["verdict"], 0.0
-    )
+    primary_result["confidence"] = CONFIDENCE_SCORES.get(primary_result["verdict"], 0.0)
     return primary_result
 
 
@@ -528,7 +559,11 @@ def _build_verification_summary(checked: List[Dict[str, Any]]) -> Dict[str, Any]
 
     total = len(checked)
     avg_confidence = total_confidence / total if total > 0 else 1.0
-    all_verified = tally[VERDICT_NOT_FOUND] == 0 and tally[VERDICT_AMBIGUOUS] == 0 and tally[VERDICT_UNCHECKED] == 0
+    all_verified = (
+        tally[VERDICT_NOT_FOUND] == 0
+        and tally[VERDICT_AMBIGUOUS] == 0
+        and tally[VERDICT_UNCHECKED] == 0
+    )
 
     return {
         "total": total,
@@ -635,6 +670,7 @@ async def verify_all_citations(
     text: str,
     max_citations: int = 25,
     use_dual_source: bool = True,
+    ctx: Optional[Context] = None,
 ) -> Dict[str, Any]:
     """Extract and verify every citation in a block of text.
 
@@ -677,58 +713,79 @@ async def verify_all_citations(
                 ),
             }
 
-        checked: List[Dict[str, Any]] = []
         case_budget = max(0, max_citations)
-        skipped = 0
+        _CONCURRENCY = 8
 
-        for citation in found:
-            if citation.kind is cit.CitationKind.CASE:
-                if case_budget <= 0:
-                    skipped += 1
-                    checked.append(
-                        {
-                            "citation": citation.raw,
-                            "parsed": citation.to_dict(),
-                            "verdict": VERDICT_UNCHECKED,
-                            "confidence": CONFIDENCE_SCORES[VERDICT_UNCHECKED],
-                            "matches": [],
-                            "note": (
-                                "Skipped: max_citations limit reached. This citation "
-                                "was NOT checked."
-                            ),
-                        }
-                    )
-                    continue
-                case_budget -= 1
-                try:
-                    outcome = await _verify_case_citation_dual(
-                        citation,
-                        use_fallback=use_dual_source,
-                        max_fallback_budget=case_budget,
-                    )
-                except SourceUnavailable as e:
-                    outcome = {
-                        "verdict": VERDICT_UNCHECKED,
-                        "confidence": CONFIDENCE_SCORES[VERDICT_UNCHECKED],
-                        "matches": [],
-                        "note": f"Source unavailable, not checked: {e}",
-                    }
-            else:
+        async def _check_one(
+            citation: cit.Citation, budget_ref: list
+        ) -> Dict[str, Any]:
+            if citation.kind is not cit.CitationKind.CASE:
                 outcome = _verify_statutory_citation(citation)
-
-            # Ensure confidence is present
-            if "confidence" not in outcome:
-                outcome["confidence"] = CONFIDENCE_SCORES.get(
-                    outcome["verdict"], 0.0
-                )
-
-            checked.append(
-                {
+                return {
                     "citation": citation.raw,
                     "parsed": citation.to_dict(),
                     **outcome,
+                    "confidence": outcome.get(
+                        "confidence",
+                        CONFIDENCE_SCORES.get(outcome["verdict"], 0.0),
+                    ),
                 }
-            )
+            if budget_ref[0] <= 0:
+                return {
+                    "citation": citation.raw,
+                    "parsed": citation.to_dict(),
+                    "verdict": VERDICT_UNCHECKED,
+                    "confidence": CONFIDENCE_SCORES[VERDICT_UNCHECKED],
+                    "matches": [],
+                    "note": (
+                        "Skipped: max_citations limit reached. This citation "
+                        "was NOT checked."
+                    ),
+                }
+            budget_ref[0] -= 1
+            try:
+                outcome = await _verify_case_citation_dual(
+                    citation,
+                    use_fallback=use_dual_source,
+                    max_fallback_budget=budget_ref[0],
+                )
+            except SourceUnavailable as e:
+                return {
+                    "citation": citation.raw,
+                    "parsed": citation.to_dict(),
+                    "verdict": VERDICT_UNCHECKED,
+                    "confidence": CONFIDENCE_SCORES[VERDICT_UNCHECKED],
+                    "matches": [],
+                    "note": f"Source unavailable, not checked: {e}",
+                }
+            return {
+                "citation": citation.raw,
+                "parsed": citation.to_dict(),
+                **outcome,
+                "confidence": outcome.get(
+                    "confidence",
+                    CONFIDENCE_SCORES.get(outcome["verdict"], 0.0),
+                ),
+            }
+
+        budget_ref = [case_budget]
+        # A semaphore around a single gather keeps the concurrency pipe full:
+        # a new citation starts the moment any in-flight one finishes, instead
+        # of waiting for the slowest member of each fixed batch.
+        semaphore = asyncio.Semaphore(_CONCURRENCY)
+        done = [0]
+
+        async def _bounded(c: cit.Citation) -> Dict[str, Any]:
+            async with semaphore:
+                result = await _check_one(c, budget_ref)
+            done[0] += 1
+            if ctx is not None:
+                await ctx.report_progress(done[0], len(found))
+            return result
+
+        checked = list(await asyncio.gather(*[_bounded(c) for c in found]))
+
+        skipped = sum(1 for c in checked if "Skipped" in c.get("note", ""))
 
         verification_summary = _build_verification_summary(checked)
 
@@ -780,6 +837,7 @@ async def build_research_memo(
     queries: Optional[List[str]] = None,
     court: Optional[str] = None,
     max_authorities: int = 6,
+    ctx: Optional[Context] = None,
 ) -> Dict[str, Any]:
     """Assemble the sourced evidence base for a legal research memo.
 
@@ -815,7 +873,9 @@ async def build_research_memo(
         per_query: List[Dict[str, Any]] = []
         authorities: Dict[str, Dict[str, Any]] = {}
 
-        for term in search_terms:
+        for index, term in enumerate(search_terms, start=1):
+            if ctx is not None:
+                await ctx.report_progress(index, len(search_terms))
             try:
                 payload = await case_law.search(query=term, court=court)
             except SourceUnavailable as e:
@@ -938,6 +998,18 @@ async def sync_case_law(
             f"Synced case law: {summary['files']} files, {summary['megabytes']} MB"
         )
 
+        # If a full-text index already exists, keep it fresh by rebuilding it.
+        fts_note = None
+        if open_judgments.get_client()._fts_available() or (
+            open_judgments.get_client()._fts_path().is_file()
+        ):
+            built = await asyncio.to_thread(open_judgments.get_client().build_fts_index)
+            if built.get("rebuilt"):
+                fts_note = (
+                    f"Full-text index rebuilt over {built['rows']} judgments "
+                    "after sync."
+                )
+
         return {
             "status": "success",
             "operation": "sync_case_law",
@@ -947,7 +1019,7 @@ async def sync_case_law(
                 f"({summary['megabytes']} MB) covering {from_year}-{to_year}. "
                 f"{summary['skipped']} already present. Search is now local, "
                 "offline and free. Judgment PDFs are fetched individually on "
-                "demand when you open one."
+                "demand when you open one." + (f" {fts_note}" if fts_note else "")
             ),
         }
 
@@ -982,11 +1054,29 @@ def case_law_status() -> Dict[str, Any]:
         Dict describing the active backend and its coverage.
     """
     try:
+        from legal_mcp_server.src.sources import open_judgments
+
         report = case_law.status()
+        fts_status = "unavailable"
+        if report.get("backend") == "open_data":
+            client = open_judgments.get_client()
+            if client._fts_available():
+                row_count = client._fts_row_count()
+                fts_status = (
+                    f"fresh ({row_count} judgments indexed)"
+                    if row_count is not None
+                    else "fresh"
+                )
+            else:
+                fts_status = (
+                    "not built - run sync_case_law or build_fts_index "
+                    "to enable BM25 full-text search"
+                )
         return {
             "status": "success",
             "operation": "case_law_status",
             "citation_verification_enabled": settings.ENABLE_CITATION_VERIFICATION,
+            "fts_index": fts_status,
             **report,
         }
     except Exception as e:

@@ -20,9 +20,7 @@ try:
         }
         if headers:
             h.update(headers)
-        req = urllib.request.Request(
-            url, data=json.dumps(obj).encode(), headers=h
-        )
+        req = urllib.request.Request(url, data=json.dumps(obj).encode(), headers=h)
         with urllib.request.urlopen(req, timeout=10) as r:
             if return_headers:
                 return r.read().decode(), dict(r.headers)
@@ -55,8 +53,11 @@ try:
     if not sid:
         for line in init.splitlines():
             if line.startswith("data:"):
-                sid = json.loads(line[5:]).get("result", {}).get("_meta", {}).get(
-                    "sessionId"
+                sid = (
+                    json.loads(line[5:])
+                    .get("result", {})
+                    .get("_meta", {})
+                    .get("sessionId")
                 )
     print("session (final):", sid)
     if not sid:
@@ -97,7 +98,10 @@ try:
             base,
             id=3,
             method="tools/call",
-            params={"name": "get_document_languages", "arguments": {"template_key": "writ_petition"}},
+            params={
+                "name": "get_document_languages",
+                "arguments": {"template_key": "writ_petition"},
+            },
         ),
         hdr,
     )
@@ -139,7 +143,7 @@ try:
     text = body["result"]["content"][0]["text"]
     parsed = json.loads(text)
     print("draft status:", parsed.get("status"), "lang:", parsed.get("language"))
-    devanagari = any("\u0900" <= ch <= "\u097F" for ch in parsed.get("draft", ""))
+    devanagari = any("\u0900" <= ch <= "\u097f" for ch in parsed.get("draft", ""))
     print("hi draft has Devanagari:", devanagari)
     print("checklist count:", len(parsed.get("checklist", [])))
 finally:

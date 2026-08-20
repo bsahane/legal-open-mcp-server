@@ -16,8 +16,15 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import yaml
-from jinja2 import Environment, FileSystemLoader, StrictUndefined, TemplateError
+from jinja2 import (
+    Environment,
+    FileSystemBytecodeCache,
+    FileSystemLoader,
+    StrictUndefined,
+    TemplateError,
+)
 
+from legal_mcp_server.src.settings import settings
 from legal_mcp_server.src.templates.languages import (
     SUPPORTED_LANGUAGES,
     translation_entries,
@@ -86,7 +93,13 @@ def inr(value: Any) -> str:
 
 @lru_cache(maxsize=1)
 def _environment() -> Environment:
-    """Jinja2 environment configured to fail loudly on missing variables."""
+    """Jinja2 environment configured to fail loudly on missing variables.
+
+    Compiled templates are cached on disk under ``LEGAL_DATA_PATH/cache/jinja2``
+    so the first render of each template in a process is the only compile.
+    """
+    cache_dir = Path(settings.LEGAL_DATA_PATH) / "cache" / "jinja2"
+    cache_dir.mkdir(parents=True, exist_ok=True)
     env = Environment(
         loader=FileSystemLoader([str(DOCUMENT_DIR), str(BASE_DIR)]),
         undefined=StrictUndefined,
@@ -94,6 +107,8 @@ def _environment() -> Environment:
         lstrip_blocks=True,
         autoescape=False,  # plain-text legal documents, not HTML
         keep_trailing_newline=True,
+        bytecode_cache=FileSystemBytecodeCache(str(cache_dir), "%s.cache"),
+        auto_reload=False,  # call reload_templates() when templates change
     )
     env.filters["inr"] = inr
     env.globals["t"] = _t
@@ -104,6 +119,10 @@ def reload_templates() -> None:
     """Drop cached manifest and environment so changes on disk take effect."""
     load_manifest.cache_clear()
     _environment.cache_clear()
+    cache_dir = Path(settings.LEGAL_DATA_PATH) / "cache" / "jinja2"
+    if cache_dir.is_dir():
+        for cached in cache_dir.glob("*.cache"):
+            cached.unlink(missing_ok=True)
 
 
 def list_templates(category: Optional[str] = None) -> Dict[str, Any]:
@@ -682,7 +701,9 @@ def translate_document(
         if not draft_text or not draft_text.strip():
             raise ValueError("draft_text must be a non-empty string")
         target_language = validate_language(target_language)
-        source_language = validate_language(source_language) if source_language else "en"
+        source_language = (
+            validate_language(source_language) if source_language else "en"
+        )
 
         if source_language == target_language:
             return {

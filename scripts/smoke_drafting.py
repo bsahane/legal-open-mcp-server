@@ -173,11 +173,17 @@ for key, params in FACTS.items():
         if status != "success":
             print(f"FAIL {key}/{lang}: {status} :: {r.get('message', r.get('error'))}")
         else:
-            assert "{{" not in r["draft"] or "{" not in r["draft"], f"jinja leftovers in {key}/{lang}"
-            print(f"OK   {key}/{lang}: {len(r['draft'])} chars, checklist={len(r['checklist'])}")
+            assert "{{" not in r["draft"] or "{" not in r["draft"], (
+                f"jinja leftovers in {key}/{lang}"
+            )
+            print(
+                f"OK   {key}/{lang}: {len(r['draft'])} chars, checklist={len(r['checklist'])}"
+            )
 
 print("--- translate_document ---")
-r = drafting_tools.draft_document("ni_138_notice", dict(FACTS["ni_138_notice"]), language="en")
+r = drafting_tools.draft_document(
+    "ni_138_notice", dict(FACTS["ni_138_notice"]), language="en"
+)
 t = drafting_tools.translate_document(r["draft"], target_language="hi")
 print("sentences_translated:", t.get("sentences_translated"))
 if "महोदय" not in t.get("translated_draft", ""):

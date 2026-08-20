@@ -42,7 +42,10 @@ def _case_law() -> dict:
     from legal_mcp_server.src.sources import case_law, open_judgments
 
     if case_law.active_backend() != "open_data":
-        return {"status": "skipped", "reason": f"backend is '{case_law.active_backend()}'"}
+        return {
+            "status": "skipped",
+            "reason": f"backend is '{case_law.active_backend()}'",
+        }
 
     courts = ["Supreme Court", f"{settings.DEFAULT_HIGH_COURT} High Court"]
     to_year = date.today().year

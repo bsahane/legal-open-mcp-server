@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import asyncio
 import re
+import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
@@ -271,6 +272,17 @@ class OpenJudgmentsClient:
         self.region = region or settings.OPEN_DATA_REGION
         self.timeout = timeout
 
+        # DuckDB connections are cached per worker thread (queries run via
+        # ``asyncio.to_thread``). A fresh in-memory connection per query would
+        # discard DuckDB's Parquet metadata cache every call; a single shared
+        # connection is not safe for concurrent use from multiple threads.
+        self._local = threading.local()
+        self._conns_lock = threading.Lock()
+        self._conns: set = set()
+        self._generation = 0
+        # Shared HTTP client for S3 sync and judgment PDF downloads.
+        self._http: Optional[httpx.AsyncClient] = None
+
     # ------------------------------------------------------------------
     # Locations
     # ------------------------------------------------------------------
@@ -384,7 +396,12 @@ class OpenJudgmentsClient:
                 key_el = contents.find(f"{S3_NAMESPACE}Key")
                 size_el = contents.find(f"{S3_NAMESPACE}Size")
                 if key_el is not None and key_el.text:
-                    keys.append((key_el.text, int(size_el.text or 0) if size_el is not None else 0))
+                    keys.append(
+                        (
+                            key_el.text,
+                            int(size_el.text or 0) if size_el is not None else 0,
+                        )
+                    )
 
             truncated = root.find(f"{S3_NAMESPACE}IsTruncated")
             if truncated is None or truncated.text != "true":
@@ -426,19 +443,19 @@ class OpenJudgmentsClient:
         years = set(range(from_year, to_year + 1))
         summary: Dict[str, Any] = {"courts": {}, "files": 0, "bytes": 0, "skipped": 0}
 
-        async with httpx.AsyncClient(timeout=self.timeout, follow_redirects=True) as client:
-            for code in codes:
-                if code is None:
-                    continue
-                if code == "SC":
-                    stats = await self._sync_sc(client, years, force)
-                else:
-                    stats = await self._sync_hc(client, code, years, force)
+        client = self._http_client()
+        for code in codes:
+            if code is None:
+                continue
+            if code == "SC":
+                stats = await self._sync_sc(client, years, force)
+            else:
+                stats = await self._sync_hc(client, code, years, force)
 
-                summary["courts"][court_label(code)] = stats
-                summary["files"] += stats["files"]
-                summary["bytes"] += stats["bytes"]
-                summary["skipped"] += stats["skipped"]
+            summary["courts"][court_label(code)] = stats
+            summary["files"] += stats["files"]
+            summary["bytes"] += stats["bytes"]
+            summary["skipped"] += stats["skipped"]
 
         summary["megabytes"] = round(summary["bytes"] / (1024 * 1024), 1)
         summary["attribution"] = ATTRIBUTION
@@ -550,7 +567,13 @@ class OpenJudgmentsClient:
     # Query
     # ------------------------------------------------------------------
     def _connect(self):
-        """Open a DuckDB connection, raising a clear error if it is missing."""
+        """Return a persistent, thread-local DuckDB connection.
+
+        Queries run in worker threads via ``asyncio.to_thread``, so each thread
+        keeps one connection. Reusing the connection across queries retains
+        DuckDB's Parquet metadata and row-group statistics cache, which a
+        fresh ``duckdb.connect()`` per call would discard.
+        """
         try:
             import duckdb
         except ImportError as exc:  # pragma: no cover - dependency is declared
@@ -558,7 +581,197 @@ class OpenJudgmentsClient:
                 "duckdb is required for open-data case law. Install with "
                 "'uv pip install duckdb'."
             ) from exc
-        return duckdb.connect()
+
+        entry = getattr(self._local, "conn", None)
+        if entry is None or entry[0] != self._generation:
+            conn = duckdb.connect()
+            with self._conns_lock:
+                self._conns.add(conn)
+            self._local.conn = (self._generation, conn)
+            return conn
+        return entry[1]
+
+    def _http_client(self) -> httpx.AsyncClient:
+        """Return the shared HTTP client for S3 sync and PDF downloads."""
+        if self._http is None:
+            self._http = httpx.AsyncClient(timeout=self.timeout, follow_redirects=True)
+        return self._http
+
+    # ------------------------------------------------------------------
+    # Full-text search index
+    # ------------------------------------------------------------------
+    def _fts_path(self) -> Path:
+        """Persistent DuckDB file holding the FTS corpus table + index."""
+        return self.root / "fts" / "corpus.duckdb"
+
+    def _fts_available(self) -> bool:
+        """Whether a fresh FTS index exists for the synced corpus.
+
+        The index counts as stale once any metadata Parquet file is newer than
+        it, because a sync may have added rows the index does not cover.
+        """
+        path = self._fts_path()
+        if not path.is_file() or path.stat().st_size == 0:
+            return False
+        index_mtime = path.stat().st_mtime
+        for pattern in (
+            self.sc_metadata_dir.glob("year=*/metadata.parquet"),
+            self.hc_metadata_dir.glob("year=*/court=*/bench=*/metadata.parquet"),
+            self.root.glob("historical/*/metadata.parquet"),
+            self.root.glob("recent/*/metadata.parquet"),
+        ):
+            for meta in pattern:
+                if meta.stat().st_mtime > index_mtime:
+                    return False
+        return True
+
+    def _connect_fts(self):
+        """Thread-local read-only connection to the FTS corpus file."""
+        entry = getattr(self._local, "fts_conn", None)
+        if entry is None or entry[0] != self._generation:
+            try:
+                import duckdb
+            except ImportError as exc:  # pragma: no cover - dependency declared
+                raise SourceUnavailable(
+                    "duckdb is required for open-data case law."
+                ) from exc
+            conn = duckdb.connect(str(self._fts_path()), read_only=True)
+            # The `fts` extension registry is process-local: a fresh process
+            # does not inherit LOAD fts from the process that built the index,
+            # so every read connection must load it itself.
+            conn.execute("LOAD fts")
+            with self._conns_lock:
+                self._conns.add(conn)
+            self._local.fts_conn = (self._generation, conn)
+            return conn
+        return entry[1]
+
+    def build_fts_index(self, force: bool = False) -> Dict[str, Any]:
+        """Build the FTS index over synced metadata into a persistent file.
+
+        The search tool transparently uses this index for BM25-ranked full-text
+        search when it is present and fresh, falling back to the LIKE-based
+        scan otherwise. Rebuild after every sync that changes the corpus.
+
+        Args:
+            force: Rebuild even when the index already looks fresh.
+
+        Returns:
+            Summary with the index path and row count.
+        """
+        sql, _globs = self._search_sql("all")
+        path = self._fts_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if not force and path.is_file() and path.stat().st_size > 0:
+            count = self._fts_row_count()
+            if count is not None:
+                return {
+                    "status": "success",
+                    "path": str(path),
+                    "rows": count,
+                    "rebuilt": False,
+                    "message": (
+                        "FTS index already present and used by search. Use "
+                        "force=True to rebuild it."
+                    ),
+                }
+
+        try:
+            import duckdb
+        except ImportError as exc:  # pragma: no cover - dependency declared
+            raise SourceUnavailable(
+                "duckdb is required to build the open-data case-law index."
+            ) from exc
+
+        # `fts` ships with DuckDB but must be fetched once on first use.
+        probe = duckdb.connect()
+        try:
+            probe.execute("INSTALL fts")
+        except Exception:  # noqa: BLE001 - already present on later installs
+            logger.debug("DuckDB FTS extension already installed")
+        probe.close()
+
+        con = duckdb.connect(str(path))
+        try:
+            con.execute("LOAD fts")
+            # Drop leftovers from a previous build so the rebuild is clean.
+            for name in (
+                "corpus",
+                "fts_main_corpus",
+                "fts_main_corpus_data",
+                "fts_main_corpus_docid",
+                "fts_main_corpus_docs",
+                "fts_main_corpus_terms",
+            ):
+                con.execute(f"DROP TABLE IF EXISTS {name}")
+            con.execute(
+                f"CREATE TABLE corpus AS "
+                f"SELECT row_number() OVER () AS id, * FROM ({sql})"
+            )
+            con.execute(
+                "PRAGMA create_fts_index"
+                "('corpus', 'id', 'title', 'description', 'judge')"
+            )
+            count_row = con.execute("SELECT COUNT(*) FROM corpus").fetchone()
+            if count_row is None:
+                count_row = (0,)
+            count = count_row[0]
+        finally:
+            con.close()
+
+        # Invalidate any cached read-only connections to the file.
+        self._generation += 1
+        with self._conns_lock:
+            conns = list(self._conns)
+            self._conns.clear()
+        for conn in conns:
+            try:
+                conn.close()
+            except Exception:  # noqa: BLE001 - best-effort
+                logger.debug("Could not close a DuckDB connection", exc_info=True)
+
+        return {
+            "status": "success",
+            "path": str(path),
+            "rows": int(count),
+            "rebuilt": True,
+            "message": (
+                f"Built the full-text index over {int(count)} judgments. "
+                "Search now uses BM25 ranking."
+            ),
+        }
+
+    def _fts_row_count(self) -> Optional[int]:
+        """Return the row count of an existing FTS corpus, or None on error."""
+        try:
+            con = self._connect_fts()
+            row = con.execute("SELECT COUNT(*) FROM corpus").fetchone()
+            return int(row[0]) if row is not None else 0
+        except Exception:  # noqa: BLE001 - best-effort freshness probe
+            return None
+
+    def close(self) -> None:
+        """Close every cached connection and the shared HTTP client.
+
+        Safe to call more than once; connections are recreated on demand
+        afterwards (the generation counter invalidates stale per-thread ones).
+        """
+        self._generation += 1
+        with self._conns_lock:
+            conns = list(self._conns)
+            self._conns.clear()
+        for conn in conns:
+            try:
+                conn.close()
+            except Exception:  # noqa: BLE001 - best-effort shutdown
+                logger.debug("Could not close a DuckDB connection", exc_info=True)
+
+        if self._http is not None:
+            try:
+                asyncio.run(self._http.aclose())
+            except RuntimeError:
+                pass  # a loop is already running; leave cleanup to GC
+            self._http = None
 
     def _search_sql(self, scope: str) -> Tuple[str, List[str]]:
         """Build the UNION query covering the requested scope.
@@ -709,13 +922,10 @@ class OpenJudgmentsClient:
         courts: set = set()
         for meta in self.root.glob("historical/*/metadata.parquet"):
             con = self._connect()
-            try:
-                for (code,) in con.execute(
-                    f"SELECT DISTINCT court FROM read_parquet('{_sql_quote(str(meta))}')"
-                ).fetchall():
-                    courts.add(code)
-            finally:
-                con.close()
+            for (code,) in con.execute(
+                f"SELECT DISTINCT court FROM read_parquet('{_sql_quote(str(meta))}')"
+            ).fetchall():
+                courts.add(code)
         return courts
 
     def _recent_courts(self) -> set:
@@ -723,13 +933,10 @@ class OpenJudgmentsClient:
         courts: set = set()
         for meta in self.root.glob("recent/*/metadata.parquet"):
             con = self._connect()
-            try:
-                for (code,) in con.execute(
-                    f"SELECT DISTINCT court FROM read_parquet('{_sql_quote(str(meta))}')"
-                ).fetchall():
-                    courts.add(code)
-            finally:
-                con.close()
+            for (code,) in con.execute(
+                f"SELECT DISTINCT court FROM read_parquet('{_sql_quote(str(meta))}')"
+            ).fetchall():
+                courts.add(code)
         return courts
 
     def _make_doc_id(self, row: Dict[str, Any]) -> str:
@@ -795,15 +1002,22 @@ class OpenJudgmentsClient:
             Ranked search results, most recent first.
         """
         scope = resolve_court(court) or "all"
+
+        if self._fts_available():
+            try:
+                return await self._search_fts(
+                    scope, query, court, from_date, to_date, judge, limit
+                )
+            except Exception as exc:  # noqa: BLE001 - fall back to LIKE
+                logger.warning("FTS search failed, falling back to LIKE scan: %s", exc)
+
         sql, _globs = self._search_sql(scope)
 
         conditions: List[str] = []
         params: List[Any] = []
 
         for term in [t for t in re.split(r"\s+", query.strip()) if t]:
-            conditions.append(
-                "(lower(title) LIKE ? OR lower(description) LIKE ?)"
-            )
+            conditions.append("(lower(title) LIKE ? OR lower(description) LIKE ?)")
             like = f"%{term.lower()}%"
             params.extend([like, like])
 
@@ -821,6 +1035,7 @@ class OpenJudgmentsClient:
         full_sql = f"""
             SELECT * FROM ({sql}) AS corpus
             {where}
+
             ORDER BY try_cast(decision_date AS DATE) DESC NULLS LAST
             LIMIT ?
         """
@@ -828,34 +1043,98 @@ class OpenJudgmentsClient:
 
         def _run() -> List[Dict[str, Any]]:
             con = self._connect()
-            try:
-                cursor = con.execute(full_sql, params)
-                columns = [d[0] for d in cursor.description]
-                return [dict(zip(columns, row)) for row in cursor.fetchall()]
-            finally:
-                con.close()
+            cursor = con.execute(full_sql, params)
+            columns = [d[0] for d in cursor.description]
+            return [dict(zip(columns, row)) for row in cursor.fetchall()]
 
         rows = await asyncio.to_thread(_run)
+        return [self._row_to_result(row) for row in rows]
 
-        results: List[SearchResult] = []
-        for row in rows:
-            description = (row.get("description") or "").strip()
-            results.append(
-                SearchResult(
-                    doc_id=self._make_doc_id(row),
-                    title=(row.get("title") or "").strip(),
-                    court=court_label(row["court_code"]),
-                    date=(row.get("decision_date") or "")[:10] or None,
-                    snippet=description[:400],
-                    url=self._public_url(row),
-                    citation=row.get("citation"),
-                    neutral_citation=row.get("neutral_citation"),
-                    judge=(row.get("judge") or "").strip() or None,
-                    disposal=row.get("disposal_nature"),
-                    cnr=row.get("cnr"),
-                )
-            )
-        return results
+    async def _search_fts(
+        self,
+        scope: str,
+        query: str,
+        court: Optional[str],
+        from_date: Optional[str],
+        to_date: Optional[str],
+        judge: Optional[str],
+        limit: int,
+    ) -> List[SearchResult]:
+        """BM25-ranked search over the built FTS index.
+
+        The FTS index narrows the candidate set; the same term-level AND
+        filters as the LIKE path are re-applied so the two paths agree on what
+        matches, differing only in ranking.
+        """
+        conditions: List[str] = []
+        params: List[Any] = []
+
+        terms = [t for t in re.split(r"\s+", query.strip()) if t]
+        if terms:
+            for term in terms:
+                conditions.append("(lower(title) LIKE ? OR lower(description) LIKE ?)")
+                like = f"%{term.lower()}%"
+                params.extend([like, like])
+            fts_query = " ".join(terms)
+        else:
+            fts_query = query
+
+        if scope != "all":
+            conditions.append("court_code = ?")
+            params.append(scope)
+        if judge:
+            conditions.append("lower(judge) LIKE ?")
+            params.append(f"%{judge.lower()}%")
+        if from_date:
+            conditions.append("try_cast(decision_date AS DATE) >= try_cast(? AS DATE)")
+            params.append(from_date)
+        if to_date:
+            conditions.append("try_cast(decision_date AS DATE) <= try_cast(? AS DATE)")
+            params.append(to_date)
+
+        fts_where = "fts_main_corpus.match_bm25(c.id, ?) IS NOT NULL"
+        if conditions:
+            where = f"WHERE {fts_where} AND {' AND '.join(conditions)}"
+        else:
+            where = f"WHERE {fts_where}"
+        full_sql = f"""
+            SELECT c.*, fts_main_corpus.match_bm25(c.id, ?) AS _score
+            FROM corpus c
+            {where}
+            ORDER BY _score DESC NULLS LAST,
+                     try_cast(c.decision_date AS DATE) DESC NULLS LAST
+            LIMIT ?
+        """
+        params = [fts_query, fts_query, *params, limit]
+
+        def _run() -> List[Dict[str, Any]]:
+            con = self._connect_fts()
+            cursor = con.execute(full_sql, params)
+            columns = [d[0] for d in cursor.description]
+            rows = [dict(zip(columns, row)) for row in cursor.fetchall()]
+            for row in rows:
+                row.pop("_score", None)
+            return rows
+
+        rows = await asyncio.to_thread(_run)
+        return [self._row_to_result(row) for row in rows]
+
+    def _row_to_result(self, row: Dict[str, Any]) -> SearchResult:
+        """Build a SearchResult from a metadata row dict."""
+        description = (row.get("description") or "").strip()
+        return SearchResult(
+            doc_id=self._make_doc_id(row),
+            title=(row.get("title") or "").strip(),
+            court=court_label(row["court_code"]),
+            date=(row.get("decision_date") or "")[:10] or None,
+            snippet=description[:400],
+            url=self._public_url(row),
+            citation=row.get("citation"),
+            neutral_citation=row.get("neutral_citation"),
+            judge=(row.get("judge") or "").strip() or None,
+            disposal=row.get("disposal_nature"),
+            cnr=row.get("cnr"),
+        )
 
     async def find_by_citation(self, citation: str) -> List[SearchResult]:
         """Look up Supreme Court judgments by S.C.R. or neutral citation.
@@ -905,12 +1184,9 @@ class OpenJudgmentsClient:
 
         def _run() -> List[Dict[str, Any]]:
             con = self._connect()
-            try:
-                cursor = con.execute(sql, [normalised, normalised])
-                columns = [d[0] for d in cursor.description]
-                return [dict(zip(columns, row)) for row in cursor.fetchall()]
-            finally:
-                con.close()
+            cursor = con.execute(sql, [normalised, normalised])
+            columns = [d[0] for d in cursor.description]
+            return [dict(zip(columns, row)) for row in cursor.fetchall()]
 
         rows = await asyncio.to_thread(_run)
         return [
@@ -945,7 +1221,12 @@ class OpenJudgmentsClient:
                 "locator": parts[4],
             }
         if parts[0] == "sc" and len(parts) == 3:
-            return {"court_code": "SC", "year": parts[1], "locator": parts[2], "bench": ""}
+            return {
+                "court_code": "SC",
+                "year": parts[1],
+                "locator": parts[2],
+                "bench": "",
+            }
         if parts[0] == "hc" and len(parts) == 5:
             return {
                 "court_code": parts[1],
@@ -991,8 +1272,7 @@ class OpenJudgmentsClient:
                 date=(metadata.get("decision_date") or "")[:10] or None,
                 bench=parts.get("bench") or None,
                 text=text,
-                url=metadata.get("source_url")
-                or (str(pdf) if pdf is not None else ""),
+                url=metadata.get("source_url") or (str(pdf) if pdf is not None else ""),
                 citation=metadata.get("citation"),
                 neutral_citation=metadata.get("neutral_citation"),
                 disposal=metadata.get("disposal_nature"),
@@ -1006,17 +1286,15 @@ class OpenJudgmentsClient:
 
         if not cached.exists() or cached.stat().st_size == 0:
             cached.parent.mkdir(parents=True, exist_ok=True)
-            async with httpx.AsyncClient(
-                timeout=self.timeout, follow_redirects=True
-            ) as client:
-                response = await client.get(url)
-                if response.status_code == 404:
-                    raise SourceUnavailable(
-                        f"No PDF published for {doc_id} at {url}. The metadata row "
-                        "exists but the document was not part of the PDF release."
-                    )
-                response.raise_for_status()
-                cached.write_bytes(response.content)
+            client = self._http_client()
+            response = await client.get(url)
+            if response.status_code == 404:
+                raise SourceUnavailable(
+                    f"No PDF published for {doc_id} at {url}. The metadata row "
+                    "exists but the document was not part of the PDF release."
+                )
+            response.raise_for_status()
+            cached.write_bytes(response.content)
 
         text = await asyncio.to_thread(self._extract_pdf_text, cached)
         metadata = await self._lookup_metadata(doc_id, parts)
@@ -1074,15 +1352,12 @@ class OpenJudgmentsClient:
 
         def _run() -> Dict[str, Any]:
             con = self._connect()
-            try:
-                cursor = con.execute(full_sql, params)
-                row = cursor.fetchone()
-                if not row:
-                    return {}
-                columns = [d[0] for d in cursor.description]
-                return dict(zip(columns, row))
-            finally:
-                con.close()
+            cursor = con.execute(full_sql, params)
+            row = cursor.fetchone()
+            if not row:
+                return {}
+            columns = [d[0] for d in cursor.description]
+            return dict(zip(columns, row))
 
         try:
             return await asyncio.to_thread(_run)
@@ -1120,6 +1395,8 @@ def get_client() -> OpenJudgmentsClient:
 
 
 def reset_client() -> None:
-    """Drop the cached client. Used by tests."""
+    """Drop the cached client, closing its connections. Used by tests."""
     global _client
+    if _client is not None:
+        _client.close()
     _client = None

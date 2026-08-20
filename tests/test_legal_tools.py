@@ -419,7 +419,7 @@ class TestDraftingTools:
         )
         assert result["status"] == "success"
         assert result["language"] == "hi"
-        assert any("\u0900" <= ch <= "\u097F" for ch in result["draft"])
+        assert any("\u0900" <= ch <= "\u097f" for ch in result["draft"])
 
     def test_draft_document_rejects_unsupported_language(self):
         """A language a template does not support is refused, not silently
@@ -471,15 +471,15 @@ class TestDraftingTools:
         )
         assert translated["status"] == "success"
         assert translated["sentences_translated"] > 0
-        assert any(
-            "\u0900" <= ch <= "\u097F" for ch in translated["translated_draft"]
-        )
+        assert any("\u0900" <= ch <= "\u097f" for ch in translated["translated_draft"])
         # user-supplied facts survive verbatim
         assert "SBI" in translated["translated_draft"]
 
     def test_translate_document_same_language_returns_unchanged(self):
         """Translating into the source language is a no-op."""
-        result = drafting_tools.translate_document("Some draft text.", target_language="en")
+        result = drafting_tools.translate_document(
+            "Some draft text.", target_language="en"
+        )
         assert result["status"] == "success"
         assert result["translated_draft"] == "Some draft text."
 
@@ -690,7 +690,7 @@ class TestDraftingTools:
             result = drafting_tools.draft_document(key, params, language="hi")
             assert result["status"] == "success", key
             assert result["language"] == "hi", key
-            assert any("\u0900" <= ch <= "\u097F" for ch in result["draft"]), key
+            assert any("\u0900" <= ch <= "\u097f" for ch in result["draft"]), key
 
     def test_get_document_languages_for_new_templates(self):
         """Every new template reports its supported languages."""

@@ -77,5 +77,17 @@ data/documents/
 # the sync_case_law tool rather than committing it.
 data/case_law/
 
+# Disk cache of case-law search responses (24h TTL). Runtime state only.
+data/cache/
+
 # Local runtime state (server pid, logs)
 .run/
+
+# Local agent/tooling state and personal case documents (not project code)
+.claude/
+.opencode/
+.agent/
+.agents/
+.bob/
+_bmad/
+reference-notices/

@@ -57,7 +57,10 @@ TOOL_ANNOTATIONS: Dict[str, Dict[str, Any]] = {
     },
     "list_bundled_acts": {"title": "List bundled Acts", "readOnlyHint": True},
     # --- Limitation and deadlines ---
-    "compute_limitation": {"title": "Compute a limitation period", "readOnlyHint": True},
+    "compute_limitation": {
+        "title": "Compute a limitation period",
+        "readOnlyHint": True,
+    },
     "find_limitation_rule": {
         "title": "Find a limitation rule",
         "readOnlyHint": True,

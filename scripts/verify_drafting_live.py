@@ -103,7 +103,25 @@ parsed = json.loads(text)
 print("draft status:", parsed.get("status"), "lang:", parsed.get("language"))
 assert parsed.get("status") == "success"
 assert parsed.get("language") == "hi"
-assert any("\u0900" <= ch <= "\u097F" for ch in parsed.get("draft", ""))
+assert any("\u0900" <= ch <= "\u097f" for ch in parsed.get("draft", ""))
 print("hi draft has Devanagari: True")
 print("checklist count:", len(parsed.get("checklist", [])))
+
+# Verify a newly added template is also live
+r3, _ = post(
+    dict(
+        base,
+        id=5,
+        method="tools/call",
+        params={
+            "name": "get_document_languages",
+            "arguments": {"template_key": "civil_revision"},
+        },
+    ),
+    hdr,
+)
+body3 = parse_sse(r3)
+parsed3 = json.loads(body3["result"]["content"][0]["text"])
+print("civil_revision languages:", parsed3.get("languages"))
+assert parsed3.get("languages") == ["en", "hi"]
 print("LIVE VERIFY OK")

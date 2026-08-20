@@ -84,6 +84,13 @@ corpus: ## Build the bundled bare-Acts corpus under data/acts
 corpus-check: ## Report bare-Acts corpus coverage without downloading
 	.venv/bin/python scripts/fetch_corpus.py --check
 
+fts: ## Build the BM25 full-text index over synced case-law metadata
+	@if [ ! -d ".venv" ]; then \
+		echo "Error: Virtual environment not found. Run 'make install' first."; \
+		exit 1; \
+	fi
+	.venv/bin/python scripts/build_fts_index.py
+
 local: ## Start MCP server locally
 	@echo "Setting up local environment..."
 	@test -f .env || (echo "Creating .env from .env.example..." && cp .env.example .env)

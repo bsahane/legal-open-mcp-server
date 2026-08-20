@@ -203,6 +203,28 @@ class IndianKanoonClient:
         self._cache: Dict[str, tuple[float, Any]] = {}
         self._lock = asyncio.Lock()
         self.ledger = SpendLedger()
+        # Long-lived client so connection pools and TLS sessions survive across
+        # calls; creating a fresh AsyncClient per request forces a TCP+TLS
+        # handshake every time. Created lazily so tests that never hit the
+        # network do not construct one.
+        self._http: Optional[httpx.AsyncClient] = None
+
+    def _get_http(self) -> httpx.AsyncClient:
+        """Return the shared HTTP client, creating it on first use."""
+        if self._http is None:
+            self._http = httpx.AsyncClient(
+                base_url=self._base_url,
+                timeout=REQUEST_TIMEOUT_SECONDS,
+                transport=self._transport,
+                limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
+            )
+        return self._http
+
+    async def close(self) -> None:
+        """Close the shared HTTP client, releasing its connection pool."""
+        if self._http is not None:
+            await self._http.aclose()
+            self._http = None
 
     @property
     def available(self) -> bool:
@@ -271,47 +293,43 @@ class IndianKanoonClient:
             }
 
             last_error: Optional[Exception] = None
-            async with httpx.AsyncClient(
-                base_url=self._base_url,
-                timeout=REQUEST_TIMEOUT_SECONDS,
-                transport=self._transport,
-            ) as client:
-                for attempt in range(MAX_RETRIES):
-                    try:
-                        response = await client.post(path, headers=headers)
-                        if response.status_code == 401:
-                            raise SourceUnavailable(
-                                "Indian Kanoon rejected the API token (401). Check "
-                                "INDIAN_KANOON_API_KEY."
-                            )
-                        if response.status_code == 429:
-                            await asyncio.sleep(2**attempt)
-                            last_error = SourceUnavailable(
-                                "Indian Kanoon rate limit (429)."
-                            )
-                            continue
-                        response.raise_for_status()
-                        payload = response.json()
-                    except SourceUnavailable:
-                        raise
-                    except Exception as e:  # noqa: BLE001 - retried below
-                        last_error = e
-                        logger.warning(
-                            f"Indian Kanoon call failed (attempt {attempt + 1}"
-                            f"/{MAX_RETRIES}): {path}: {e}"
-                        )
-                        await asyncio.sleep(2**attempt)
-                        continue
-
-                    # The API reports some failures as a 200 with an error body.
-                    if isinstance(payload, dict) and payload.get("errmsg"):
+            client = self._get_http()
+            for attempt in range(MAX_RETRIES):
+                try:
+                    response = await client.post(path, headers=headers)
+                    if response.status_code == 401:
                         raise SourceUnavailable(
-                            f"Indian Kanoon returned an error: {payload['errmsg']}"
+                            "Indian Kanoon rejected the API token (401). Check "
+                            "INDIAN_KANOON_API_KEY."
                         )
+                    if response.status_code == 429:
+                        await asyncio.sleep(2**attempt)
+                        last_error = SourceUnavailable(
+                            "Indian Kanoon rate limit (429)."
+                        )
+                        continue
+                    response.raise_for_status()
+                    payload = response.json()
+                except SourceUnavailable:
+                    raise
+                except Exception as e:  # noqa: BLE001 - retried below
+                    last_error = e
+                    logger.warning(
+                        f"Indian Kanoon call failed (attempt {attempt + 1}"
+                        f"/{MAX_RETRIES}): {path}: {e}"
+                    )
+                    await asyncio.sleep(2**attempt)
+                    continue
 
-                    self.ledger.record(cost_inr)
-                    self._cache_put(path, payload)
-                    return payload
+                # The API reports some failures as a 200 with an error body.
+                if isinstance(payload, dict) and payload.get("errmsg"):
+                    raise SourceUnavailable(
+                        f"Indian Kanoon returned an error: {payload['errmsg']}"
+                    )
+
+                self.ledger.record(cost_inr)
+                self._cache_put(path, payload)
+                return payload
 
             raise SourceUnavailable(
                 f"Indian Kanoon could not be reached after {MAX_RETRIES} attempts: "
@@ -479,4 +497,9 @@ def get_client() -> IndianKanoonClient:
 def reset_client() -> None:
     """Drop the shared client. Used by tests and after a settings change."""
     global _client
+    if _client is not None:
+        try:
+            asyncio.run(_client.close())
+        except RuntimeError:
+            pass  # a loop is already running; leave cleanup to GC
     _client = None

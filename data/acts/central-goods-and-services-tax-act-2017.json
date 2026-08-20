@@ -1,0 +1,98 @@
+{
+  "slug": "central-goods-and-services-tax-act-2017",
+  "title": "Central Goods and Services Tax Act, 2017",
+  "short_title": "CGST Act",
+  "year": 2017,
+  "act_number": "12 of 2017",
+  "aliases": [
+    "gst act",
+    "cgst",
+    "central gst act",
+    "goods and services tax act"
+  ],
+  "coverage": "partial",
+  "text_kind": "summary",
+  "source": "curated summary - authentic text at the India Code URL",
+  "india_code_url": "https://www.indiacode.nic.in/handle/123456789/2487",
+  "note": "Key sections for registration, supply, input tax credit, returns, assessment, refunds, appeals. Read with SGST/IGST/UTGST Acts and GST Rules.",
+  "sections": [
+    {
+      "number": "2",
+      "heading": "Definitions",
+      "text": "Key definitions: (17) business; (52) goods; (90) services; (102) supply; (105) taxable person; (107) taxable supply; (108) taxable territory; (110) turnover in State; (112) works contract; (114) zero-rated supply.",
+      "chapter": "I"
+    },
+    {
+      "number": "7",
+      "heading": "Scope of supply",
+      "text": "Supply includes all forms of supply of goods or services or both such as sale, transfer, barter, exchange, license, rental, lease or disposal made for a consideration in the course or furtherance of business. Includes import of services for consideration. Excludes: services by employee to employer, services by court/tribunal, functions of MPs/MLAs, duties of public office holders.",
+      "chapter": "II"
+    },
+    {
+      "number": "9",
+      "heading": "Levy and collection",
+      "text": "CGST levied on intra-State supply of goods or services at rates notified (0%, 5%, 12%, 18%, 28%). Reverse charge under s.9(3) for specified categories (GTA, advocates, arbitral tribunal, sponsorship, government services). Composition levy under s.10 for small taxpayers (turnover up to Rs 1.5 cr) at 1% (trader), 5% (restaurant), 6% (others).",
+      "chapter": "II"
+    },
+    {
+      "number": "22",
+      "heading": "Persons liable for registration",
+      "text": "Every supplier liable for registration if aggregate turnover in a FY exceeds Rs 20 lakh (Rs 10 lakh for special category States). Compulsory registration for: inter-State supply, casual taxable person, non-resident taxable person, e-commerce operator, TDS deductor, input service distributor, OIDAR services. Voluntary registration allowed.",
+      "chapter": "VI"
+    },
+    {
+      "number": "16",
+      "heading": "Eligibility and conditions for taking input tax credit",
+      "text": "ITC available if: (a) tax invoice/debit note received; (b) goods/services received; (c) tax actually paid to Government; (d) return under s.39 filed. Blocked credits under s.17(5): motor vehicles (except for further supply/transport), food & beverages, club membership, health insurance (except notified), travel benefits to employees, works contract for immovable property (except plant/machinery), goods lost/stolen/destroyed, membership fees, goods for personal use.",
+      "chapter": "V"
+    },
+    {
+      "number": "17",
+      "heading": "Apportionment of credit and blocked credits",
+      "text": "ITC on inputs used for both taxable and exempt supplies must be apportioned. Formula: ITC attributable to exempt supplies = (total ITC x value of exempt supplies) / total turnover. Blocked credits under s.17(5) cannot be claimed even if used for taxable supplies.",
+      "chapter": "V"
+    },
+    {
+      "number": "31",
+      "heading": "Tax invoice",
+      "text": "Tax invoice must be issued at or before time of supply for goods; before or after supply for services. Must contain: supplier/recipient GSTIN, invoice number, date, HSN/SAC code, description, quantity, value, taxable value, rate, tax amount, place of supply, signature. Bill of supply for exempt/composition supplies.",
+      "chapter": "VI"
+    },
+    {
+      "number": "35",
+      "heading": "Accounts and records",
+      "text": "Every registered person to maintain true and correct accounts of production/manufacture, inward/outward supply, stock, ITC availed, output tax payable/paid. Books to be retained for 72 months from due date of annual return. Audit required if turnover exceeds Rs 5 cr (by CA/CMA).",
+      "chapter": "VII"
+    },
+    {
+      "number": "39",
+      "heading": "Furnishing of returns",
+      "text": "Monthly returns: GSTR-1 (outward supplies) by 11th of next month; GSTR-3B (summary) by 20th of next month. Quarterly returns for turnover up to Rs 5 cr (QRMP scheme): GSTR-1 quarterly, GSTR-3B monthly. Annual return GSTR-9 by 31 December of next FY. GSTR-9C (reconciliation) if turnover > Rs 5 cr.",
+      "chapter": "VII"
+    },
+    {
+      "number": "54",
+      "heading": "Refund of tax",
+      "text": "Refund claim within 2 years from relevant date (date of payment for excess payment; date of export for zero-rated supplies). Refund for: exports (with LUT/bond), inverted duty structure (ITC accumulation), deemed exports, tax paid under wrong head. Provisional refund 90% within 7 days for exports. Interest @ 6% if refund delayed beyond 60 days.",
+      "chapter": "X"
+    },
+    {
+      "number": "73",
+      "heading": "Determination of tax not paid or short paid",
+      "text": "Adjudication for tax not paid/short paid not by fraud: notice within 3 years from due date of annual return; order within 3 years from notice. For fraud/suppression/misstatement: notice within 5 years; order within 5 years from notice. Penalty: 10% of tax or Rs 10,000 (whichever higher) for non-fraud; 100% for fraud.",
+      "chapter": "XII"
+    },
+    {
+      "number": "74",
+      "heading": "Determination of tax not paid or short paid by reason of fraud",
+      "text": "Where tax not paid/short paid by reason of fraud/suppression/misstatement: notice within 5 years from due date of annual return; order within 5 years from notice. Penalty equal to tax evaded (100%). Interest @ 18% from due date to date of payment. Burden of proof on Department to establish fraud.",
+      "chapter": "XII"
+    },
+    {
+      "number": "100",
+      "heading": "Appeal to Appellate Authority",
+      "text": "Any person aggrieved by an order may appeal to the Appellate Authority within 3 months (extendable by 1 month). Pre-deposit: 10% of disputed tax (maximum Rs 25 cr). Appeal to Tribunal within 3 months against Appellate Authority order. Further appeal to High Court on substantial question of law.",
+      "chapter": "XVII"
+    }
+  ]
+}

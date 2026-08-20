@@ -33,6 +33,8 @@ __all__ = [
     "CorpusNotSynced",
     "CaseLawDisabled",
     "active_backend",
+    "set_backend",
+    "reset_backend",
     "search",
     "get_judgment",
     "find_by_citation",
@@ -42,13 +44,31 @@ __all__ = [
 ]
 
 
+# Process-global override of the configured backend, used by the dual-source
+# citation fallback. Must only be changed while holding the caller's backend
+# switch lock, or concurrent verifications will clobber each other.
+_runtime_backend: Optional[str] = None
+
+
 class CaseLawDisabled(SourceUnavailable):
     """Raised when case-law tools are switched off by configuration."""
 
 
 def active_backend() -> str:
-    """Name of the configured case-law backend."""
-    return settings.CASE_LAW_SOURCE
+    """Name of the configured case-law backend, honouring any runtime override."""
+    return _runtime_backend or settings.CASE_LAW_SOURCE
+
+
+def set_backend(backend: str) -> None:
+    """Temporarily override the active backend (dual-source citation fallback)."""
+    global _runtime_backend
+    _runtime_backend = backend
+
+
+def reset_backend() -> None:
+    """Drop the runtime override, returning to the configured source."""
+    global _runtime_backend
+    _runtime_backend = None
 
 
 def _require_enabled() -> str:
@@ -203,9 +223,7 @@ async def find_by_citation(citation: str) -> Dict[str, Any]:
     return payload
 
 
-async def find_related_proceedings(
-    doc_id: str, limit: int = 20
-) -> Dict[str, Any]:
+async def find_related_proceedings(doc_id: str, limit: int = 20) -> Dict[str, Any]:
     """Find other proceedings sharing this case's party names.
 
     This is deliberately *not* a citator. The open corpus has no citation graph,
@@ -279,9 +297,26 @@ def _party_terms(title: str) -> List[str]:
     halves = re.split(r"\s+(?:versus|vs\.?|v\.?)\s+", cleaned, flags=re.IGNORECASE)
 
     stop = {
-        "the", "of", "and", "ors", "anr", "state", "union", "india", "ltd",
-        "limited", "pvt", "private", "company", "co", "through", "another",
-        "others", "dec", "no", "nos",
+        "the",
+        "of",
+        "and",
+        "ors",
+        "anr",
+        "state",
+        "union",
+        "india",
+        "ltd",
+        "limited",
+        "pvt",
+        "private",
+        "company",
+        "co",
+        "through",
+        "another",
+        "others",
+        "dec",
+        "no",
+        "nos",
     }
     terms: List[str] = []
     for half in halves[:2]:
@@ -319,7 +354,9 @@ async def search_within_judgment(doc_id: str, query: str) -> Dict[str, Any]:
     terms = [t for t in re.split(r"\s+", query.strip()) if t]
     passages: List[Dict[str, Any]] = []
 
-    for match in re.finditer("|".join(re.escape(t) for t in terms), text, re.IGNORECASE):
+    for match in re.finditer(
+        "|".join(re.escape(t) for t in terms), text, re.IGNORECASE
+    ):
         start = max(0, match.start() - 300)
         end = min(len(text), match.end() + 300)
         passages.append(

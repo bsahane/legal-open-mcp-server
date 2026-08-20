@@ -47,6 +47,8 @@ dependencies = [
     "beautifulsoup4==4.12.3",
     # Queries the free open-data judgment corpus (Parquet) locally.
     "duckdb==1.5.5",
+    # SQLite-backed, ACID, LRU-evicting disk cache for case-law search results.
+    "diskcache==5.6.3",
 ]
 
 [project.optional-dependencies]

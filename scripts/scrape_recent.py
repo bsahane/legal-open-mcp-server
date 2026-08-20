@@ -81,9 +81,7 @@ def _ssl_context() -> ssl.SSLContext:
 
 
 def _fetch(url: str, headers: Optional[Dict[str, str]] = None) -> bytes:
-    req = urllib.request.Request(
-        url, headers=headers or {"User-Agent": "Mozilla/5.0"}
-    )
+    req = urllib.request.Request(url, headers=headers or {"User-Agent": "Mozilla/5.0"})
     with urllib.request.urlopen(
         req, timeout=REQUEST_TIMEOUT_SECONDS, context=_ssl_context()
     ) as resp:
@@ -105,9 +103,7 @@ def _parse_date(d: str) -> str:
     return ""
 
 
-def harvest_bhc_recent(
-    min_date: date, download: bool, delay: float
-) -> List[Case]:
+def harvest_bhc_recent(min_date: date, download: bool, delay: float) -> List[Case]:
     """Recent reported judgments from the Bombay High Court portal."""
     cases: List[Case] = []
     seen: set = set()
@@ -179,7 +175,7 @@ def harvest_sc_latest(min_date: date) -> List[Case]:
     html = _fetch(SC_ORDERS).decode("utf-8", "ignore")
     entries = re.findall(
         r'<li>\s*<a href="https://www\.sci\.gov\.in/view-pdf/'
-        r'\?diary_no=(\d+)&type=([a-z])&order_date=(\d{4}-\d{2}-\d{2})'
+        r"\?diary_no=(\d+)&type=([a-z])&order_date=(\d{4}-\d{2}-\d{2})"
         r'[^"]*"[^>]*>(.*?)</a>\s*</li>',
         html,
         re.S,
@@ -191,9 +187,7 @@ def harvest_sc_latest(min_date: date) -> List[Case]:
         if d < min_date:
             continue
         clean = _clean(txt)
-        title = re.sub(
-            r"\s*-\s*Diary Number.*$", "", clean.split(" - (Uploaded")[0]
-        )
+        title = re.sub(r"\s*-\s*Diary Number.*$", "", clean.split(" - (Uploaded")[0])
         title = re.sub(r"\s*-\s*\d{2}-[A-Za-z]{3}-\d{4}\s*$", "", title)
         mcase = re.search(r"-\s*([A-Za-z().]+ No\.?\s*[\d/-]+)\s*-", clean)
         citation = mcase.group(1) if mcase else ""

@@ -52,21 +52,38 @@ def your_tool_function(
 
 ### **Tool Registration**
 
-Add your tool to `../mcp.py`:
+Each tool module exports a `TOOLS` list. Registration is handled by the `TOOL_GROUPS` dict in `../mcp.py` — add a new group there if creating a new module, or append to an existing module's `TOOLS` list.
+
+Every tool function also needs an entry in `../tool_annotations.py` with `title`, `readOnlyHint`, and `destructiveHint` — a missing entry logs a warning at startup.
 
 ```python
-# Import your tool
-from legal_mcp_server.src.tools.your_tool import your_tool_function
+# In your tool module (e.g. legal_mcp_server/src/tools/your_tools.py):
+TOOLS = [your_tool_function, another_tool_function]
 
-# Register in _register_mcp_tools()
-self.mcp.tool()(your_tool_function)
+# In legal_mcp_server/src/mcp.py, add the group loader:
+def _your_tools() -> List[Callable[..., Any]]:
+    from legal_mcp_server.src.tools import your_tools
+    return your_tools.TOOLS
+
+TOOL_GROUPS["your"] = _your_tools
+
+# In legal_mcp_server/src/tool_annotations.py, add metadata:
+"your_tool_function": {
+    "title": "Your Tool",
+    "readOnlyHint": True,
+    "destructiveHint": False,
+},
 ```
 
 ## 📋 **Current Tools**
 
-- `multiply_tool.py` - Basic arithmetic operations
-- `code_review_tool.py` - Generate code review prompts (converted from prompt)
-- `redhat_logo_tool.py` - Asset retrieval (converted from resource)
+- `research_tools.py` - Case-law search, citation verification, judgment retrieval
+- `statute_tools.py` - Bare-Act lookup and criminal-code concordance (IPC↔BNS, CrPC↔BNSS, Evidence↔BSA)
+- `deadline_tools.py` - Limitation period computation and deadline tracking
+- `matter_tools.py` - Matter management, hearing tracking, chronology
+- `document_tools.py` - Document ingest, search, and review
+- `drafting_tools.py` - Legal document drafting from templates
+- `court_tools.py` - Court status, directory, and jurisdiction lookup
 
 ## ✅ **Best Practices**
 
@@ -74,7 +91,7 @@ self.mcp.tool()(your_tool_function)
 2. **Error Handling**: Wrap in try/catch, return structured errors
 3. **Input Validation**: Validate all inputs before processing
 4. **Logging**: Use `from legal_mcp_server.utils.pylogger import get_python_logger`
-5. **Testing**: Add tests to `../../tests/test_tools.py`
+5. **Testing**: Add tests in `../../tests/` (one test file per tool module)
 
 ## 🎯 **Agent-Friendly Tips**
 
