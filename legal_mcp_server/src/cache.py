@@ -113,3 +113,17 @@ def clear_cache() -> int:
     except Exception as e:
         logger.debug(f"Case-law cache clear failed: {e}")
         return 0
+
+
+def close_cache() -> None:
+    """Close the diskcache store and drop this process's handle.
+
+    Called at server shutdown so SQLite WAL files are checkpointed and no
+    resources outlive the process. Safe to call more than once.
+    """
+    try:
+        _get_cache().close()
+    except Exception as e:
+        logger.debug(f"Case-law cache close failed: {e}")
+    finally:
+        _get_cache.cache_clear()

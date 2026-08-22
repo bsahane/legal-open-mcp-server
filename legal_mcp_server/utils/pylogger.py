@@ -73,6 +73,11 @@ THIRD_PARTY_LOGGERS: Set[str] = (
 
 ERROR_ONLY_LOGGERS: Set[str] = ML_AI_LOGGERS | OBSERVABILITY_LOGGERS
 
+# Our application logger root: pinned into the uvicorn dictConfig with its
+# own handler so app records never depend on mutable root-handler state,
+# which third-party imports and reconfigurations can silently clear.
+APP_LOGGERS: Set[str] = {"legal_mcp_server"}
+
 _LOGGING_CONFIGURED = False
 
 
@@ -92,9 +97,14 @@ def _setup_logger(logger_name: str, level: str) -> None:
 
 
 def _configure_third_party_loggers(log_level: str) -> None:
-    """Apply structured logging to selected third-party loggers."""
-    logging.getLogger().handlers.clear()
+    """Apply structured logging to selected third-party loggers.
 
+    Deliberately leaves the root logger's handlers alone: this runs on every
+    ``get_python_logger()`` call (i.e. on every module import that creates a
+    module-level logger), and clearing root handlers here silently dropped
+    every subsequent INFO record from any module imported after us —
+    including our own phased build/sync logs.
+    """
     for name in THIRD_PARTY_LOGGERS:
         _setup_logger(name, log_level)
 
@@ -130,11 +140,22 @@ def get_python_logger(log_level: str = "INFO") -> structlog.BoundLogger:
         log_level = "INFO"
 
     if not _LOGGING_CONFIGURED:
-        logging.basicConfig(
-            format="%(message)s",
-            stream=sys.stdout,
-            level=log_level,
-        )
+        # force=True: some third-party imports reconfigure or clear root
+        # handlers, which would silently drop every INFO record (warnings
+        # would still escape via logging.lastResort). Re-installing our
+        # stdout handler guarantees the JSON stream always reaches output.
+        root = logging.getLogger()
+        for handler in list(root.handlers):
+            root.removeHandler(handler)
+            try:
+                handler.close()
+            except Exception:  # noqa: BLE001 - defensive cleanup
+                pass
+        handler = logging.StreamHandler(sys.stdout)
+        handler.setFormatter(logging.Formatter("%(message)s"))
+        handler.setLevel(log_level)
+        root.addHandler(handler)
+        root.setLevel(log_level)
 
         structlog.configure(
             processors=[
@@ -211,6 +232,7 @@ def get_uvicorn_log_config(log_level: str = "INFO") -> Dict[str, Any]:
         "loggers": {
             **make_logger_config(base_loggers, log_level),
             **make_logger_config(access_loggers, log_level),
+            **make_logger_config(list(APP_LOGGERS), log_level),
             **make_logger_config(
                 list(THIRD_PARTY_LOGGERS - ERROR_ONLY_LOGGERS), log_level
             ),

@@ -2,6 +2,7 @@
 
 from unittest.mock import AsyncMock, Mock, patch
 
+import pytest
 from fastapi.testclient import TestClient
 
 from legal_mcp_server.src.api import app, get_host
@@ -233,3 +234,72 @@ class TestRegisterEndpointRoute:
             data = response.json()
             assert data["client_id"] == "client123"
             mock_result.model_dump.assert_called_once()
+
+
+class TestReleaseResources:
+    """Shutdown resource release is total, best-effort and repeatable."""
+
+    @pytest.mark.asyncio
+    async def test_releases_all_three_resources(self):
+        """Corpus client, Kanoon client and disk cache are all released."""
+        from legal_mcp_server.src import api
+        from legal_mcp_server.src import cache as search_cache
+        from legal_mcp_server.src.sources import indian_kanoon, open_judgments
+
+        corpus = AsyncMock()
+        kanoon = AsyncMock()
+        cache_close = Mock()
+        with (
+            patch.object(open_judgments, "aclose_client", corpus),
+            patch.object(indian_kanoon, "aclose_client", kanoon),
+            patch.object(search_cache, "close_cache", cache_close),
+        ):
+            await api._release_resources()
+
+        corpus.assert_awaited_once()
+        kanoon.assert_awaited_once()
+        cache_close.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_failure_in_one_resource_does_not_stop_the_rest(self):
+        """A wedged resource is logged; the remaining releases still run."""
+        from legal_mcp_server.src import api
+        from legal_mcp_server.src import cache as search_cache
+        from legal_mcp_server.src.sources import indian_kanoon, open_judgments
+
+        boom = AsyncMock(side_effect=RuntimeError("wedged"))
+        cache_close = Mock()
+        with (
+            patch.object(open_judgments, "aclose_client", boom),
+            patch.object(indian_kanoon, "aclose_client", AsyncMock()) as kanoon,
+            patch.object(search_cache, "close_cache", cache_close),
+        ):
+            await api._release_resources()
+
+        kanoon.assert_awaited_once()
+        cache_close.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_sync_and_async_closers_are_both_supported(self):
+        """Sync callables run directly; awaitables are awaited."""
+        from legal_mcp_server.src import api
+
+        calls = []
+
+        def sync_closer():
+            calls.append("sync")
+
+        async def async_closer():
+            calls.append("async")
+
+        from legal_mcp_server.src import cache as search_cache
+        from legal_mcp_server.src.sources import indian_kanoon, open_judgments
+
+        with (
+            patch.object(open_judgments, "aclose_client", sync_closer),
+            patch.object(indian_kanoon, "aclose_client", async_closer),
+            patch.object(search_cache, "close_cache", lambda: calls.append("c")),
+        ):
+            await api._release_resources()
+
+        assert calls == ["sync", "async", "c"]

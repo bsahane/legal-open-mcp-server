@@ -570,3 +570,14 @@ def reset_client() -> None:
         except RuntimeError:
             pass  # a loop is already running; leave cleanup to GC
     _client = None
+
+
+async def aclose_client() -> None:
+    """Close and drop the shared client if one exists (server shutdown).
+
+    A no-op when nothing was instantiated; safe to call from a running loop.
+    """
+    global _client
+    if _client is not None:
+        await _client.close()
+        _client = None

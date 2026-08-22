@@ -5,6 +5,7 @@ the MCP server with appropriate transport protocols.
 """
 
 import webbrowser
+from collections.abc import Awaitable
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator, Callable, Optional
 from urllib.parse import urlparse
@@ -74,6 +75,33 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         logger.info("Storage service shutdown complete")
     except Exception as e:
         logger.error(f"Error during storage cleanup: {e}")
+
+    # Release corpus and cache resources so nothing blocks interpreter exit.
+    logger.info("Releasing corpus, source and cache resources...")
+    await _release_resources()
+
+
+async def _release_resources() -> None:
+    """Close long-lived clients opened by the tool/source layers.
+
+    Every step is best-effort: shutdown problems are logged, never raised,
+    so a wedged resource cannot prevent the process from exiting.
+    """
+    from legal_mcp_server.src import cache as search_cache
+    from legal_mcp_server.src.sources import indian_kanoon, open_judgments
+
+    for name, closer in (
+        ("open-data corpus client", open_judgments.aclose_client),
+        ("Indian Kanoon client", indian_kanoon.aclose_client),
+        ("case-law disk cache", search_cache.close_cache),
+    ):
+        try:
+            result = closer()
+            if isinstance(result, Awaitable):
+                await result
+        except Exception as e:  # noqa: BLE001 - best-effort shutdown
+            logger.warning(f"Could not release {name} cleanly: {e}")
+    logger.info("Resource release complete")
 
 
 app = FastAPI(lifespan=lifespan)

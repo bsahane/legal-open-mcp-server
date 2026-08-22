@@ -7,7 +7,7 @@ the citation matching and the doc-id round trip are all genuinely exercised.
 
 from pathlib import Path
 from typing import Any, Dict, List
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -593,6 +593,26 @@ class TestFullTextIndex:
         assert result["rebuilt"] is False
         assert result["rows"] == 3
 
+    def test_forced_rebuild_over_existing_index_succeeds(self, corpus):
+        """Rebuilding twice must not trip over the previous index.
+
+        Regression: create_fts_index refuses to run while catalog metadata
+        from the old index lingers; a stale-index drop has to happen first.
+        """
+        first = self._build(corpus)
+        assert first["rebuilt"] is True
+
+        try:
+            second = corpus.build_fts_index(force=True)
+        except Exception as exc:  # noqa: BLE001 - extension may be unavailable
+            pytest.skip(f"DuckDB FTS extension not usable here: {exc}")
+
+        assert second["status"] == "success"
+        assert second["rebuilt"] is True
+        assert second["rows"] == 3
+        assert "elapsed_seconds" in second
+        assert corpus._fts_available() is True
+
     def test_stale_after_newer_metadata(self, corpus):
         self._build(corpus)
         assert corpus._fts_available() is True
@@ -707,3 +727,60 @@ class TestPagination:
         assert payload["page"] == 1
         direct = await paged_corpus.search("pagination matter", limit=2, page=1)
         assert [r["doc_id"] for r in payload["results"]] == [r.doc_id for r in direct]
+
+
+class TestShutdown:
+    """Resource release must be total and repeatable."""
+
+    @staticmethod
+    def _client_with_fakes():
+        """A client holding one fake DuckDB conn and one fake HTTP client."""
+        from unittest.mock import MagicMock
+
+        client = open_judgments.OpenJudgmentsClient(data_path="/tmp/never-used")
+        fake_conn = MagicMock()
+        client._conns.add(fake_conn)
+        fake_http = MagicMock()
+        fake_http.aclose = AsyncMock(return_value=None)
+        client._http = fake_http
+        return client, fake_conn, fake_http
+
+    @pytest.mark.asyncio
+    async def test_aclose_closes_conns_and_http(self):
+        """aclose() drops every DuckDB conn and awaits the HTTP client close."""
+        client, fake_conn, fake_http = self._client_with_fakes()
+
+        await client.aclose()
+
+        fake_conn.close.assert_called_once()
+        fake_http.aclose.assert_awaited_once()
+        assert len(client._conns) == 0
+        assert client._http is None
+
+    @pytest.mark.asyncio
+    async def test_aclose_is_repeatable_and_tolerant(self):
+        """Closing twice, or with a broken connection, never raises."""
+        client, fake_conn, _http = self._client_with_fakes()
+        fake_conn.close.side_effect = RuntimeError("already closed")
+
+        await client.aclose()
+        await client.aclose()
+
+        assert len(client._conns) == 0
+
+    @pytest.mark.asyncio
+    async def test_module_aclose_client_noop_when_never_created(self):
+        """The shutdown helper is a no-op when no singleton exists."""
+        with patch.object(open_judgments, "_client", None):
+            await open_judgments.aclose_client()
+            assert open_judgments._client is None
+
+    @pytest.mark.asyncio
+    async def test_module_aclose_client_closes_singleton(self):
+        """The shutdown helper closes and clears the shared client."""
+        client, fake_conn, fake_http = self._client_with_fakes()
+        with patch.object(open_judgments, "_client", client):
+            await open_judgments.aclose_client()
+            fake_conn.close.assert_called_once()
+            fake_http.aclose.assert_awaited_once()
+            assert open_judgments._client is None

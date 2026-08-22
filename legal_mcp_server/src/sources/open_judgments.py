@@ -27,8 +27,10 @@ Attribution (required by CC-BY-4.0) is returned with every result.
 from __future__ import annotations
 
 import asyncio
+import os
 import re
 import threading
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
@@ -749,8 +751,22 @@ class OpenJudgmentsClient:
         probe.close()
 
         con = duckdb.connect(str(path))
+        started = time.monotonic()
         try:
+            # Large builds (multi-million rows) spill aggressively; keep the
+            # memory footprint bounded so containerised builds are not OOM
+            # killed mid-write, and disable insertion-order preservation so
+            # the corpus table streams straight to disk.
+            self._apply_duckdb_resource_guards(con)
             con.execute("LOAD fts")
+            logger.info("FTS build: dropping stale tables (if any)")
+            # A previous index leaves catalog metadata behind even once its
+            # backing tables are gone, and create_fts_index refuses to run
+            # over it - remove it explicitly before anything else.
+            try:
+                con.execute("PRAGMA drop_fts_index('corpus')")
+            except Exception as exc:  # noqa: BLE001 - none exists on first build
+                logger.debug(f"No stale FTS index to drop: {exc}")
             # Drop leftovers from a previous build so the rebuild is clean.
             for name in (
                 "corpus",
@@ -761,42 +777,70 @@ class OpenJudgmentsClient:
                 "fts_main_corpus_terms",
             ):
                 con.execute(f"DROP TABLE IF EXISTS {name}")
+            logger.info("FTS build: scanning metadata Parquet into corpus table")
             con.execute(
                 f"CREATE TABLE corpus AS "
                 f"SELECT row_number() OVER () AS id, * FROM ({sql})"
+            )
+            count_row = con.execute("SELECT COUNT(*) FROM corpus").fetchone()
+            if count_row is None:
+                count_row = (0,)
+            count = int(count_row[0])
+            logger.info(
+                f"FTS build: corpus table ready with {count} rows "
+                f"in {time.monotonic() - started:.1f}s"
             )
             con.execute(
                 "PRAGMA create_fts_index"
                 "('corpus', 'id', 'title', 'description', 'judge')"
             )
-            count_row = con.execute("SELECT COUNT(*) FROM corpus").fetchone()
-            if count_row is None:
-                count_row = (0,)
-            count = count_row[0]
+            logger.info(
+                f"FTS build: BM25 index created in "
+                f"{time.monotonic() - started:.1f}s total; committing"
+            )
         finally:
             con.close()
 
+        elapsed = time.monotonic() - started
         # Invalidate any cached read-only connections to the file.
-        self._generation += 1
-        with self._conns_lock:
-            conns = list(self._conns)
-            self._conns.clear()
-        for conn in conns:
-            try:
-                conn.close()
-            except Exception:  # noqa: BLE001 - best-effort
-                logger.debug("Could not close a DuckDB connection", exc_info=True)
+        self._close_duckdb()
+        logger.info(f"FTS build: committed {count} rows to {path} in {elapsed:.1f}s")
 
         return {
             "status": "success",
             "path": str(path),
             "rows": int(count),
             "rebuilt": True,
+            "elapsed_seconds": round(elapsed, 1),
             "message": (
-                f"Built the full-text index over {int(count)} judgments. "
-                "Search now uses BM25 ranking."
+                f"Built the full-text index over {int(count)} judgments in "
+                f"{elapsed:.1f}s. Search now uses BM25 ranking."
             ),
         }
+
+    @staticmethod
+    def _apply_duckdb_resource_guards(con: Any) -> None:
+        """Bound a build connection's memory use; best-effort, never raises.
+
+        Caps DuckDB at ~60% of reported RAM (max 8 GB) when the OS exposes
+        it; on any failure the defaults stay in force.
+        """
+        try:
+            page_size = os.sysconf("SC_PAGE_SIZE")
+            page_count = os.sysconf("SC_PHYS_PAGES")
+            total_bytes = page_size * page_count
+        except (ValueError, OSError, AttributeError):  # pragma: no cover
+            return
+        limit_bytes = min(int(total_bytes * 0.6), 8 * 1024**3)
+        try:
+            con.execute(f"SET memory_limit='{limit_bytes // (1024**2)}MB'")
+            con.execute("SET preserve_insertion_order=false")
+            logger.info(
+                f"FTS build: memory_limit="
+                f"{limit_bytes // (1024**2)}MB, preserve_insertion_order=off"
+            )
+        except Exception as e:  # noqa: BLE001 - guards are advisory
+            logger.warning(f"FTS build: could not apply resource guards: {e}")
 
     def _fts_row_count(self) -> Optional[int]:
         """Return the row count of an existing FTS corpus, or None on error."""
@@ -813,6 +857,25 @@ class OpenJudgmentsClient:
         Safe to call more than once; connections are recreated on demand
         afterwards (the generation counter invalidates stale per-thread ones).
         """
+        self._close_duckdb()
+
+        if self._http is not None:
+            try:
+                asyncio.run(self._http.aclose())
+            except RuntimeError:
+                pass  # a loop is already running; leave cleanup to GC
+            self._http = None
+
+    async def aclose(self) -> None:
+        """Async variant of :meth:`close` for use inside a running loop."""
+        self._close_duckdb()
+
+        if self._http is not None:
+            await self._http.aclose()
+            self._http = None
+
+    def _close_duckdb(self) -> None:
+        """Drop every cached DuckDB connection; safe to call repeatedly."""
         self._generation += 1
         with self._conns_lock:
             conns = list(self._conns)
@@ -822,13 +885,6 @@ class OpenJudgmentsClient:
                 conn.close()
             except Exception:  # noqa: BLE001 - best-effort shutdown
                 logger.debug("Could not close a DuckDB connection", exc_info=True)
-
-        if self._http is not None:
-            try:
-                asyncio.run(self._http.aclose())
-            except RuntimeError:
-                pass  # a loop is already running; leave cleanup to GC
-            self._http = None
 
     def _search_sql(self, scope: str) -> Tuple[str, List[str]]:
         """Build the UNION query covering the requested scope.
@@ -1464,3 +1520,16 @@ def reset_client() -> None:
     if _client is not None:
         _client.close()
     _client = None
+
+
+async def aclose_client() -> None:
+    """Close and drop the shared client if one exists.
+
+    Used by the server's lifespan shutdown so idle DuckDB connections and
+    the sync HTTP client never outlive the process; a no-op when nothing
+    was instantiated.
+    """
+    global _client
+    if _client is not None:
+        await _client.aclose()
+        _client = None

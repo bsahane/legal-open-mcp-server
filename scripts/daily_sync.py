@@ -21,6 +21,7 @@ import json
 import logging
 import subprocess
 import sys
+import time
 from datetime import date
 from pathlib import Path
 
@@ -148,7 +149,11 @@ def _fts_rebuild() -> dict:
     pays the fallback cost until someone runs ``make fts`` by hand. Runs
     after all judgment sources (open data + archives) are final so a single
     rebuild covers them.
+
+    The build logs its own progress to stderr (parquet scan, corpus table,
+    index creation, commit), so an unattended failure always leaves a trail.
     """
+    started = time.monotonic()
     try:
         from legal_mcp_server.src.sources import case_law, open_judgments
 
@@ -163,16 +168,24 @@ def _fts_rebuild() -> dict:
             return {"status": "ok", "rebuilt": False}
         log.info("Rebuilding FTS index over the synced corpus")
         summary = client.build_fts_index(force=True)
-        log.info("FTS index rebuilt: %d rows", summary.get("rows", 0))
+        elapsed = round(time.monotonic() - started, 1)
+        rows = summary.get("rows")
+        path = summary.get("path")
+        log.info("FTS index rebuilt: %s rows in %.1fs at %s", rows, elapsed, path)
         return {
             "status": "ok",
             "rebuilt": True,
-            "rows": summary.get("rows"),
-            "path": summary.get("path"),
+            "rows": rows,
+            "path": path,
+            "elapsed_seconds": elapsed,
         }
     except Exception as exc:
-        log.error("FTS rebuild failed: %s", exc)
-        return {"status": "error", "error": str(exc)}
+        log.exception("FTS rebuild failed after %.1fs", time.monotonic() - started)
+        return {
+            "status": "error",
+            "error": str(exc),
+            "elapsed_seconds": round(time.monotonic() - started, 1),
+        }
 
 
 def main() -> int:

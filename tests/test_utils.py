@@ -519,24 +519,22 @@ class TestPylogger:
         mock_logger.setLevel.assert_called_once_with(mock_logging.ERROR)
         assert mock_logger.propagate is True
 
-    @patch("legal_mcp_server.utils.pylogger.logging")
     @patch("legal_mcp_server.utils.pylogger._setup_logger")
-    def test_configure_third_party_loggers(self, mock_setup_logger, mock_logging):
-        """Test _configure_third_party_loggers function."""
+    def test_configure_third_party_loggers(self, mock_setup_logger):
+        """Test _configure_third_party_loggers function.
+
+        Root handlers must be left alone: this function runs on every
+        get_python_logger() call, and clearing root here used to drop all
+        subsequent app INFO records (regression).
+        """
         # Arrange
         log_level = "DEBUG"
-        mock_root_logger = Mock()
-        mock_logging.getLogger.return_value = mock_root_logger
 
         # Act
         _configure_third_party_loggers(log_level)
 
         # Assert
-        # Check that root logger handlers are cleared
-        mock_logging.getLogger.assert_called_once_with()
-        mock_root_logger.handlers.clear.assert_called_once()
-
-        # Check that _setup_logger is called for each third-party logger
+        # _setup_logger is called for each third-party logger
         expected_calls = len(THIRD_PARTY_LOGGERS)
         assert mock_setup_logger.call_count == expected_calls
 
@@ -578,3 +576,41 @@ class TestPylogger:
 
         # Assert - the flag should be True after force_reconfigure (since it calls get_python_logger)
         assert pylogger_module._LOGGING_CONFIGURED is True
+
+
+class TestRootHandlerPreservation:
+    """get_python_logger must never wipe root handlers.
+
+    Regression: _configure_third_party_loggers used to clear root handlers
+    on every call (every module import with a module-level logger), which
+    silently dropped all subsequent INFO records — including the phased
+    FTS-build and nightly-sync logs.
+    """
+
+    def test_repeated_calls_preserve_root_handlers(self):
+        """Two consecutive configurations leave a root handler in place."""
+        import logging
+
+        from legal_mcp_server.utils import pylogger
+
+        root = logging.getLogger()
+        pylogger.force_reconfigure_all_loggers("INFO")
+        assert len(root.handlers) >= 1
+        pylogger.force_reconfigure_all_loggers("INFO")
+
+        assert len(root.handlers) >= 1
+
+    def test_third_party_config_does_not_touch_root(self):
+        """Configuring third-party loggers leaves the root handlers alone."""
+        import logging
+
+        from legal_mcp_server.utils import pylogger
+
+        root = logging.getLogger()
+        sentinel = logging.StreamHandler()
+        root.addHandler(sentinel)
+        try:
+            pylogger._configure_third_party_loggers("INFO")
+            assert sentinel in root.handlers
+        finally:
+            root.removeHandler(sentinel)

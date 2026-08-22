@@ -108,6 +108,7 @@ def main() -> None:
             host=settings.MCP_HOST,
             port=settings.MCP_PORT,
             log_config=get_uvicorn_log_config(settings.PYTHON_LOG_LEVEL),
+            timeout_graceful_shutdown=settings.MCP_GRACEFUL_SHUTDOWN_SECONDS,
             **uvicorn_config,
         )
 

@@ -6,6 +6,27 @@ This project uses [GitHub Releases](https://github.com/redhat-data-and-ai/legal-
 
 ## [Unreleased]
 
+### Fixed
+
+- Root-cause fixed: `_configure_third_party_loggers` cleared **all** root
+  logger handlers on every `get_python_logger()` call (i.e. on every module
+  import with a module-level logger), silently dropping all INFO records from
+  modules imported afterwards — this is why unattended FTS builds produced
+  empty logs. The app logger hierarchy is also pinned into the uvicorn
+  `dictConfig`, so application records no longer depend on mutable root
+  handler state at all.
+- Bounded graceful shutdown: uvicorn now force-closes lingering connections
+  after `MCP_GRACEFUL_SHUTDOWN_SECONDS` (default 15s) instead of hanging past
+  systemd's 90s stop timeout, and the lifespan shutdown releases the
+  open-data corpus client (DuckDB + HTTP), the Indian Kanoon client and the
+  search disk cache deterministically.
+- The FTS build logs its phases (parquet scan, corpus table, BM25 index,
+  commit) and caps DuckDB memory at ~60% of RAM (max 8 GB), so unattended
+  builds leave a trail instead of dying silently; `build_fts_index.py` now
+  flushes output and exits non-zero on failure.
+- The nightly sync reports elapsed time and row counts for the FTS rebuild,
+  including failures.
+
 ### Added
 
 - Pagination on the free open-data case-law backend: `search_case_law` now

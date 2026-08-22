@@ -55,17 +55,13 @@ class TestFailureModes:
     @pytest.mark.asyncio
     async def test_read_failure_returns_none(self, cache_root):
         """If the store cannot be read, get_cached degrades to a miss."""
-        with patch.object(
-            cache, "_get_cache", side_effect=RuntimeError("disk gone")
-        ):
+        with patch.object(cache, "_get_cache", side_effect=RuntimeError("disk gone")):
             assert await cache.get_cached("q") is None
 
     @pytest.mark.asyncio
     async def test_write_failure_is_swallowed(self, cache_root):
         """If the store cannot be written, set_cached stays silent."""
-        with patch.object(
-            cache, "_get_cache", side_effect=RuntimeError("disk gone")
-        ):
+        with patch.object(cache, "_get_cache", side_effect=RuntimeError("disk gone")):
             await cache.set_cached({"n": 1}, query="q")
 
     @pytest.mark.asyncio
@@ -90,7 +86,22 @@ class TestClear:
 
     def test_clear_failure_returns_zero(self, cache_root):
         """A failed clear reports zero rather than raising."""
-        with patch.object(
-            cache, "_get_cache", side_effect=RuntimeError("disk gone")
-        ):
+        with patch.object(cache, "_get_cache", side_effect=RuntimeError("disk gone")):
             assert cache.clear_cache() == 0
+
+
+class TestClose:
+    """close_cache releases the store but the module keeps working."""
+
+    @pytest.mark.asyncio
+    async def test_close_then_reuse(self, cache_root):
+        """After closing, a new lookup transparently reopens the store."""
+        await cache.set_cached({"n": 1}, query="before close")
+        cache.close_cache()
+        assert await cache.get_cached("before close") == {"n": 1}
+
+    def test_close_is_repeatable_and_tolerant(self, cache_root):
+        """Closing twice, or with the store already broken, never raises."""
+        cache.close_cache()
+        with patch.object(cache, "_get_cache", side_effect=RuntimeError("disk gone")):
+            cache.close_cache()

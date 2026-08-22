@@ -60,6 +60,18 @@ class Settings(BaseSettings):
             "example": 5001,
         },
     )
+    MCP_GRACEFUL_SHUTDOWN_SECONDS: int = Field(
+        default=15,
+        ge=1,
+        json_schema_extra={
+            "env": "MCP_GRACEFUL_SHUTDOWN_SECONDS",
+            "description": (
+                "Seconds to wait for in-flight requests on shutdown before "
+                "uvicorn force-closes them. Bounds systemd stop time."
+            ),
+            "example": 15,
+        },
+    )
     MCP_SSL_KEYFILE: Optional[str] = Field(
         default=None,
         json_schema_extra={
