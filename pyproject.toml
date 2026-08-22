@@ -44,7 +44,7 @@ dependencies = [
     "rapidfuzz==3.10.1",
     "pgvector==0.3.6",
     "pyyaml==6.0.2",
-    "beautifulsoup4==4.12.3",
+    "beautifulsoup4==4.15.0",
     # Queries the free open-data judgment corpus (Parquet) locally.
     "duckdb==1.5.5",
     # SQLite-backed, ACID, LRU-evicting disk cache for case-law search results.
