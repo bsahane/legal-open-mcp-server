@@ -283,6 +283,187 @@ class TestResearchTools:
         result = await research_tools.verify_all_citations("The parties met twice.")
         assert result["citation_count"] == 0
 
+    @staticmethod
+    def _sweep_text(count: int) -> str:
+        """Build prose holding ``count`` distinct case citations."""
+        return " ".join(
+            f"Fake Corp {i} v. Nobody, (2099) {i} SCC {i}, held otherwise."
+            for i in range(1, count + 1)
+        )
+
+    @pytest.mark.asyncio
+    async def test_sweep_verifies_case_citations_concurrently(self):
+        """Case checks overlap in flight instead of one per round-trip.
+
+        The semaphore-bounded gather must let several verifications run at
+        once; a sequential sweep would show a max in-flight count of 1.
+        """
+        import asyncio
+
+        state = {"in_flight": 0, "max_in_flight": 0}
+
+        async def slow_verify(citation, use_fallback=True, max_fallback_budget=25):
+            state["in_flight"] += 1
+            state["max_in_flight"] = max(state["max_in_flight"], state["in_flight"])
+            await asyncio.sleep(0.05)
+            state["in_flight"] -= 1
+            return {
+                "verdict": research_tools.VERDICT_VERIFIED,
+                "matches": [],
+            }
+
+        with patch.object(research_tools, "_verify_case_citation_dual", slow_verify):
+            result = await research_tools.verify_all_citations(self._sweep_text(8))
+
+        assert result["status"] == "success"
+        assert result["citation_count"] == 8
+        assert result["all_verified"] is True
+        assert state["max_in_flight"] > 1
+
+    @pytest.mark.asyncio
+    async def test_sweep_enforces_budget_under_concurrency(self):
+        """Exactly ``max_citations`` case checks run even when gathered at once.
+
+        The budget counter lives in a shared mutable cell across coroutines;
+        this pins the contract that the rest are skipped, not checked.
+        """
+        calls = []
+
+        async def counting_verify(citation, use_fallback=True, max_fallback_budget=25):
+            calls.append(citation.raw)
+            return {
+                "verdict": research_tools.VERDICT_VERIFIED,
+                "matches": [],
+            }
+
+        with patch.object(
+            research_tools, "_verify_case_citation_dual", counting_verify
+        ):
+            result = await research_tools.verify_all_citations(
+                self._sweep_text(8), max_citations=3
+            )
+
+        assert len(calls) == 3
+        assert result["skipped_for_budget"] == 5
+        skipped_notes = [
+            c for c in result["citations"] if "Skipped" in c.get("note", "")
+        ]
+        assert len(skipped_notes) == 5
+
+    @pytest.mark.asyncio
+    async def test_sweep_marks_unavailable_source_per_citation(self):
+        """A dead source yields UNCHECKED citations, not a failed sweep."""
+
+        async def unavailable(citation, use_fallback=True, max_fallback_budget=25):
+            raise research_tools.SourceUnavailable("both sources down")
+
+        text = (
+            f"{self._sweep_text(1)} Also, Section 138 of the Negotiable "
+            "Instruments Act, 1881 applies."
+        )
+        with patch.object(research_tools, "_verify_case_citation_dual", unavailable):
+            result = await research_tools.verify_all_citations(text)
+
+        assert result["status"] == "success"
+        case_entry = next(
+            c for c in result["citations"] if "Source unavailable" in c.get("note", "")
+        )
+        assert case_entry["verdict"] == research_tools.VERDICT_UNCHECKED
+        # The free statutory check still ran alongside the failed case check.
+        statutory = next(
+            c for c in result["citations"] if "Section 138" in c["citation"]
+        )
+        assert statutory["verdict"] == research_tools.VERDICT_VERIFIED
+
+
+class TestCitationVerificationCache:
+    """Repeated sweeps must reuse the disk cache, not re-hit sources."""
+
+    @pytest.fixture
+    def isolated_cache(self, tmp_path):
+        """Point the shared diskcache at a throwaway directory."""
+        from legal_mcp_server.src import cache as cache_mod
+        from legal_mcp_server.src.settings import settings
+
+        with patch.object(settings, "LEGAL_DATA_PATH", str(tmp_path)):
+            cache_mod._get_cache.cache_clear()
+            yield cache_mod
+        cache_mod._get_cache.cache_clear()
+
+    @pytest.mark.asyncio
+    async def test_second_check_of_same_citation_is_cached(self, isolated_cache):
+        """The source is consulted once; the repeat is served from cache."""
+        from legal_mcp_server.src.domain import citations as cit
+
+        calls = []
+
+        async def fake_verify(citation):
+            calls.append(citation.raw)
+            return {
+                "verdict": research_tools.VERDICT_VERIFIED,
+                "matches": [{"title": "Fake v. Nobody"}],
+            }
+
+        parsed = cit.extract_all("Fake Ltd v. Nobody, (2099) 12 SCC 555")[0]
+        with patch.object(research_tools, "_verify_case_citation", fake_verify):
+            first = await research_tools._verify_case_citation_dual(parsed)
+            second = await research_tools._verify_case_citation_dual(parsed)
+
+        assert len(calls) == 1
+        assert first.get("cached") is None
+        assert second["cached"] is True
+        assert second["verdict"] == research_tools.VERDICT_VERIFIED
+
+    @pytest.mark.asyncio
+    async def test_distinct_citations_are_cached_separately(self, isolated_cache):
+        """Two different citations each get their own cached verdict."""
+        from legal_mcp_server.src.domain import citations as cit
+
+        calls = []
+
+        async def fake_verify(citation):
+            calls.append(citation.raw)
+            return {
+                "verdict": research_tools.VERDICT_NOT_FOUND,
+                "matches": [],
+            }
+
+        one = cit.extract_all("Fake Ltd v. Nobody, (2099) 12 SCC 555")[0]
+        two = cit.extract_all("Other Co v. Somebody, (2098) 3 SCC 444")[0]
+        with patch.object(research_tools, "_verify_case_citation", fake_verify):
+            await research_tools._verify_case_citation_dual(one)
+            await research_tools._verify_case_citation_dual(two)
+
+        assert len(calls) == 2
+
+    @pytest.mark.asyncio
+    async def test_source_failure_is_not_cached(self, isolated_cache):
+        """A dead source is retried on the next call, not frozen for a day."""
+        from legal_mcp_server.src.domain import citations as cit
+
+        calls = []
+
+        async def boom(citation):
+            raise research_tools.SourceUnavailable("corpus down")
+
+        parsed = cit.extract_all("Fake Ltd v. Nobody, (2099) 12 SCC 555")[0]
+        with patch.object(research_tools, "_verify_case_citation", boom):
+            with pytest.raises(research_tools.SourceUnavailable):
+                await research_tools._verify_case_citation_dual(parsed)
+
+        async def recovered(citation):
+            calls.append(citation.raw)
+            return {
+                "verdict": research_tools.VERDICT_VERIFIED,
+                "matches": [],
+            }
+
+        with patch.object(research_tools, "_verify_case_citation", recovered):
+            result = await research_tools._verify_case_citation_dual(parsed)
+
+        assert len(calls) == 1
+        assert result["verdict"] == research_tools.VERDICT_VERIFIED
+
     def test_status_reports_unsynced_corpus_plainly(self, tmp_path):
         """Status must state that nothing is searchable until a sync happens."""
         from legal_mcp_server.src.sources import open_judgments

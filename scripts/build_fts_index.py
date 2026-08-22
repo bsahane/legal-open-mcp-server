@@ -18,6 +18,7 @@ from legal_mcp_server.src.sources import open_judgments
 
 
 def main() -> None:
+    """Parse CLI arguments and build (or refresh) the FTS index."""
     parser = argparse.ArgumentParser(
         description="Build the BM25 full-text index over synced case law."
     )

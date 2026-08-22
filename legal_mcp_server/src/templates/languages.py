@@ -406,21 +406,20 @@ def get_supported_languages() -> Dict[str, Dict[str, str]]:
 
 
 def translation_entries() -> Dict[str, Dict[str, str]]:
-    """Return the raw translation dictionary for tooling (e.g. rule-based
-    translation of already-rendered drafts).
+    """Return the raw translation dictionary for tooling.
 
-    Keys are stable phrase identifiers; values map language code to the
-    translated string, with ``{{ name }}`` placeholders for user-supplied
-    values.
+    Used for rule-based translation of already-rendered drafts. Keys are
+    stable phrase identifiers; values map language code to the translated
+    string, with ``{{ name }}`` placeholders for user-supplied values.
     """
     return _TRANSLATIONS
 
 
 def validate_language(language: Optional[str]) -> str:
-    """Normalise a language code, returning :data:`DEFAULT_LANGUAGE` on
-    missing or unknown input.
+    """Normalise a language code to its bare form.
 
-    Accepts bare codes (``"hi"``) and tags (``"hi-IN"``).
+    Returns :data:`DEFAULT_LANGUAGE` on missing or unknown input. Accepts
+    bare codes (``"hi"``) and tags (``"hi-IN"``).
     """
     if not language:
         return DEFAULT_LANGUAGE

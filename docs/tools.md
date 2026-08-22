@@ -162,6 +162,14 @@ Hybrid Postgres full-text + pgvector cosine, fused by reciprocal rank. The
 response reports `search_mode` (`hybrid` or `fulltext_only`) so a weak result
 set is never mistaken for a thorough search.
 
+When `search_mode` is `fulltext_only`, the `semantic_note` field explains why
+and how to enable semantic ranking:
+
+- **Offline:** install the `local` extra (`pip install 'legal-mcp-server[local]'`)
+  and set `EMBEDDING_PROVIDER=local`.
+- **Voyage API:** install the `voyage` extra, set `EMBEDDING_PROVIDER=voyage`
+  and provide `VOYAGE_API_KEY`.
+
 ### `get_document` / `list_my_documents`
 Retrieve or enumerate. `list_my_documents` reports the embedding status.
 

@@ -1,3 +1,6 @@
+#!/usr/bin/env python3
+"""Live drafting check against the deployed legal-mcp instance."""
+
 import json
 import urllib.request
 
@@ -5,6 +8,7 @@ URL = "https://legal-mcp.tech247.in/mcp"
 
 
 def post(obj, headers=None):
+    """POST a JSON-RPC body to the deployed server; return text + headers."""
     h = {
         "Content-Type": "application/json",
         "Accept": "application/json, text/event-stream",
@@ -13,11 +17,12 @@ def post(obj, headers=None):
     if headers:
         h.update(headers)
     req = urllib.request.Request(URL, data=json.dumps(obj).encode(), headers=h)
-    with urllib.request.urlopen(req, timeout=30) as r:
+    with urllib.request.urlopen(req, timeout=30) as r:  # nosec B310 - our own deployed instance
         return r.read().decode(), dict(r.headers)
 
 
 def parse_sse(text):
+    """Return the payload of the first SSE ``data:`` line, if any."""
     for line in text.splitlines():
         if line.startswith("data:"):
             return json.loads(line[5:].strip())

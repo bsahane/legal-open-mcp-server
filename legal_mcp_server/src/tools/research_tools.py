@@ -11,11 +11,17 @@ and High Court judgments (CC-BY-4.0): no API key, no per-query cost.
 """
 
 import asyncio
+import hashlib
 from typing import Any, Dict, List, Optional
 
 from fastmcp import Context
 
-from legal_mcp_server.src.cache import get_cached, set_cached
+from legal_mcp_server.src.cache import (
+    get_cached,
+    get_cached_value,
+    set_cached,
+    set_cached_value,
+)
 from legal_mcp_server.src.domain import citations as cit
 from legal_mcp_server.src.settings import settings
 from legal_mcp_server.src.sources import case_law
@@ -77,9 +83,9 @@ async def search_case_law(
     DISPLAY_NAME=Indian Case Law Search
     USECASE=Find Indian judgments on a legal proposition, from the Supreme Court or any High Court, at no cost
     INSTRUCTIONS=1. Check the corpus covers what you need with case_law_status, 2. Search by party name, case title terms or judge - this indexes case metadata, not full judgment text, 3. Open promising results with get_judgment to read the actual reasoning, 4. Never cite a result you have not opened
-    INPUT_DESCRIPTION=query (string, required): search terms; all terms must appear. court (string, optional): "Supreme Court", "Bombay High Court", "Delhi", etc. from_date/to_date (string, optional): YYYY-MM-DD bounds. judge (string, optional): judge name fragment. limit (int, optional, default 20): maximum results.
-    OUTPUT_DESCRIPTION=Dictionary with status, results (doc_id, title, court, date, citation, neutral_citation, judge, disposal, url), the backend used, and a scope note stating what was actually searched
-    EXAMPLES=search_case_law("cheque dishonour", court="Bombay High Court"), search_case_law("Vijay Singh Bihar", court="Supreme Court")
+    INPUT_DESCRIPTION=query (string, required): search terms; all terms must appear. court (string, optional): "Supreme Court", "Bombay High Court", "Delhi", etc. from_date/to_date (string, optional): YYYY-MM-DD bounds. judge (string, optional): judge name fragment. limit (int, optional, default 20): results per page. page (int, optional, default 0): zero-based page into the ranked results.
+    OUTPUT_DESCRIPTION=Dictionary with status, results (doc_id, title, court, date, citation, neutral_citation, judge, disposal, url), the backend used, the page returned, and a scope note stating what was actually searched
+    EXAMPLES=search_case_law("cheque dishonour", court="Bombay High Court"), search_case_law("Vijay Singh Bihar", court="Supreme Court"), search_case_law("specific performance", page=2)
     PREREQUISITES=Run sync_case_law once for the courts and years you need. No API key and no per-query cost on the default open-data backend.
     RELATED_TOOLS=sync_case_law to widen coverage, get_judgment to read a result, search_within_judgment to locate a passage, verify_citation to confirm a citation
 
@@ -91,8 +97,8 @@ async def search_case_law(
         from_date: Optional lower date bound, YYYY-MM-DD.
         to_date: Optional upper date bound, YYYY-MM-DD.
         judge: Optional judge filter.
-        limit: Maximum results to return.
-        page: Zero-based results page (paid backend only).
+        limit: Maximum results to return per page.
+        page: Zero-based results page into the ranked result set.
 
     Returns:
         Dict with the ranked results and search metadata.
@@ -488,19 +494,29 @@ async def _verify_case_citation_dual(
     use_fallback: bool = True,
     max_fallback_budget: int = 5,
 ) -> Dict[str, Any]:
-    """
-    Verify a case citation with dual-source fallback.
+    """Verify a case citation with dual-source fallback and a disk cache.
 
     First tries the primary backend (open_data). If that returns NOT_FOUND or
     AMBIGUOUS and use_fallback is True, queries Indian Kanoon (paid) if budget
-    allows.
+    allows. Results are cached on disk for 24 hours keyed by the exact
+    citation and fallback setting, so repeated sweeps of an unchanged draft
+    do not re-hit sources or re-incur paid calls.
     """
-    from legal_mcp_server.src.sources import case_law
+    cache_key = (
+        f"citation_verify|{hashlib.sha256(citation.raw.strip().encode()).hexdigest()}"
+        f"|dual={bool(use_fallback)}"
+    )
+    cached = await get_cached_value(cache_key)
+    if cached is not None:
+        hit = dict(cached)
+        hit["cached"] = True
+        return hit
 
     # Try primary backend first
     primary_result = await _verify_case_citation(citation)
 
     if primary_result["verdict"] == VERDICT_VERIFIED:
+        await set_cached_value(primary_result, cache_key)
         return primary_result
 
     # If primary failed and fallback enabled, try Indian Kanoon
@@ -520,6 +536,7 @@ async def _verify_case_citation_dual(
                         fallback_result["fallback_used"] = True
                         fallback_result["primary_backend"] = original_backend
                         fallback_result["fallback_backend"] = "indian_kanoon"
+                        await set_cached_value(fallback_result, cache_key)
                         return fallback_result
                     finally:
                         case_law.reset_backend()
@@ -528,6 +545,7 @@ async def _verify_case_citation_dual(
 
     # Return primary result with confidence
     primary_result["confidence"] = CONFIDENCE_SCORES.get(primary_result["verdict"], 0.0)
+    await set_cached_value(primary_result, cache_key)
     return primary_result
 
 
@@ -681,7 +699,7 @@ async def verify_all_citations(
     INPUT_DESCRIPTION=text (string, required): the prose to sweep. max_citations (int, optional, default 25): cap on case citations verified, to bound cost. use_dual_source (bool, optional, default True): if True, falls back to Indian Kanoon when open_data cannot verify.
     OUTPUT_DESCRIPTION=Dictionary with status, per-citation verdicts, counts by verdict, confidence scores, an all_verified flag, a verification summary, and the total spend incurred
     EXAMPLES=verify_all_citations(draft_memo_text), verify_all_citations(notice_text, max_citations=10)
-    PREREQUISITES=Case citations cost Rs 0.50 each against the Indian Kanoon budget; statutory citations are free
+    PREREQUISITES=Case citations cost Rs 0.50 each against the Indian Kanoon budget; statutory citations are free. Unchanged citations are served from a 24-hour disk cache, so repeat sweeps cost nothing
     RELATED_TOOLS=verify_citation for a single citation; build_research_memo runs this sweep automatically
 
     I/O-bound operation - uses async def for external API calls.

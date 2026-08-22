@@ -186,11 +186,13 @@ class TestEmbeddings:
             assert emb.get_provider() is None
 
     def test_disabled_status_explains_the_limitation(self):
-        """The status says plainly what full-text search cannot do."""
+        """The status says plainly what full-text search cannot do and how to fix it."""
         with patch.object(emb.settings, "EMBEDDING_PROVIDER", "disabled"):
             status = emb.provider_status()
         assert status["semantic_search"] is False
         assert "conceptual queries" in status["note"]
+        assert "EMBEDDING_PROVIDER=local" in status["note"]
+        assert "EMBEDDING_PROVIDER=voyage" in status["note"]
 
     def test_voyage_without_key_raises(self):
         """Voyage without a key is an explicit configuration error."""

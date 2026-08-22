@@ -2,9 +2,15 @@
 
 > **Decision**: Which optimizations to apply — and in what order — to reduce document search latency, case-law query response times, and citation verification throughput in the legal-mcp Python MCP server.
 
-> **Type**: Technical  
-> **Status**: Complete  
+> **Type**: Technical
+> **Status**: Complete
 > **Date**: 2026-08-20
+
+> **ARCHIVED (2026-08-22):** this study's recommendations have been implemented
+> (DuckDB FTS index, persistent read-only connections with thread-local reuse,
+> long-lived httpx clients, bounded-concurrency citation sweeps, disk cache).
+> Kept for design rationale; see `PERFORMANCE_OPTIMIZATION_PLAN.md` and
+> `CHANGELOG.md` for what shipped.
 
 ---
 

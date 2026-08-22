@@ -48,7 +48,27 @@ def _cache_key(
     page: int,
 ) -> str:
     raw = f"{query}|{court}|{from_date}|{to_date}|{judge}|{limit}|{page}"
-    return hashlib.sha256(raw.encode()).hexdigest()
+    return f"search|{hashlib.sha256(raw.encode()).hexdigest()}"
+
+
+async def get_cached_value(key: str) -> Optional[Any]:
+    """Return an arbitrary cached payload by exact key, or None on miss/error."""
+    try:
+        return await asyncio.to_thread(_get_cache().get, key)
+    except Exception as e:
+        logger.debug(f"Cache read failed for {key}: {e}")
+        return None
+
+
+async def set_cached_value(data: Any, key: str) -> None:
+    """Store an arbitrary payload under ``key`` with the shared TTL.
+
+    Failures are logged and swallowed so caching can never break a lookup.
+    """
+    try:
+        await asyncio.to_thread(_get_cache().set, key, data, expire=CACHE_TTL_SECONDS)
+    except Exception as e:
+        logger.debug(f"Cache write failed for {key}: {e}")
 
 
 async def get_cached(
@@ -61,12 +81,8 @@ async def get_cached(
     page: int = 0,
 ) -> Optional[Any]:
     """Return the cached search response, or None on miss/expiry/error."""
-    try:
-        key = _cache_key(query, court, from_date, to_date, judge, limit, page)
-        return await asyncio.to_thread(_get_cache().get, key)
-    except Exception as e:
-        logger.debug(f"Case-law cache read failed; proceeding to live search: {e}")
-        return None
+    key = _cache_key(query, court, from_date, to_date, judge, limit, page)
+    return await get_cached_value(key)
 
 
 async def set_cached(
@@ -83,11 +99,8 @@ async def set_cached(
 
     Failures are logged and swallowed so caching can never break a search.
     """
-    try:
-        key = _cache_key(query, court, from_date, to_date, judge, limit, page)
-        await asyncio.to_thread(_get_cache().set, key, data, expire=CACHE_TTL_SECONDS)
-    except Exception as e:
-        logger.debug(f"Case-law cache write failed; search result still returned: {e}")
+    key = _cache_key(query, court, from_date, to_date, judge, limit, page)
+    await set_cached_value(data, key)
 
 
 def clear_cache() -> int:

@@ -56,6 +56,8 @@ REQUEST_TIMEOUT_SECONDS = 40
 
 @dataclass
 class Case:
+    """One recently-published judgment harvested from a court website."""
+
     court: str
     bench: str
     year: int
@@ -83,7 +85,9 @@ def _ssl_context() -> ssl.SSLContext:
 def _fetch(url: str, headers: Optional[Dict[str, str]] = None) -> bytes:
     req = urllib.request.Request(url, headers=headers or {"User-Agent": "Mozilla/5.0"})
     with urllib.request.urlopen(
-        req, timeout=REQUEST_TIMEOUT_SECONDS, context=_ssl_context()
+        req,
+        timeout=REQUEST_TIMEOUT_SECONDS,
+        context=_ssl_context(),  # nosec B310 - official court sites over https
     ) as resp:
         return resp.read()
 
@@ -124,7 +128,10 @@ def harvest_bhc_recent(min_date: date, download: bool, delay: float) -> List[Cas
             last = tds[-1]
             if not title or "order-pdf" not in last:
                 continue
-            dstr = _parse_date(re.search(r"(\d{2}/\d{2}/\d{4})", last).group(1))
+            date_match = re.search(r"(\d{2}/\d{2}/\d{4})", last)
+            if date_match is None:
+                continue
+            dstr = _parse_date(date_match.group(1))
             if not dstr:
                 continue
             d = datetime.strptime(dstr, "%Y-%m-%d").date()
@@ -221,6 +228,7 @@ def harvest_sc_latest(min_date: date) -> List[Case]:
 
 
 def download_pdfs(cases: List[Case], delay: float) -> None:
+    """Download each case's PDF that is not already on disk, politely."""
     for case in cases:
         if not case.pdf_url or not case.pdf_link:
             continue
@@ -242,8 +250,10 @@ def download_pdfs(cases: List[Case], delay: float) -> None:
 
 
 def write_metadata(cases: List[Case]) -> List[Path]:
-    """Write per-court parquet files (one per court, matching the server's
-    ``recent/*/metadata.parquet`` glob)."""
+    """Write per-court parquet files, one per court.
+
+    The layout matches the server's ``recent/*/metadata.parquet`` glob.
+    """
     RECENT_DIR.mkdir(parents=True, exist_ok=True)
     written: List[Path] = []
     by_court: Dict[str, List[Case]] = {}
@@ -289,6 +299,7 @@ def write_metadata(cases: List[Case]) -> List[Path]:
 
 
 def main() -> int:
+    """Harvest recent judgments; see the module docstring for usage."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--download", action="store_true", help="Download BHC PDFs (default: no)"

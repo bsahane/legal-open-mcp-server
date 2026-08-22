@@ -107,7 +107,7 @@ async def search(
         to_date: Inclusive upper bound, ``YYYY-MM-DD``.
         judge: Restrict to a judge whose name contains this.
         limit: Maximum results (open-data backend).
-        page: Zero-based page (Indian Kanoon backend).
+        page: Zero-based page into the ranked results (both backends).
 
     Returns:
         Dict with ``results``, ``backend``, ``cost`` and backend metadata.
@@ -123,6 +123,7 @@ async def search(
             to_date=to_date,
             judge=judge,
             limit=limit,
+            page=max(0, page),
         )
         return {
             "backend": backend,
@@ -130,7 +131,7 @@ async def search(
             "results": [r.to_dict() for r in results],
             "found": len(results),
             "query": query,
-            "page": 0,
+            "page": max(0, page),
             "attribution": open_judgments.ATTRIBUTION,
             "scope_note": (
                 "Search covers case metadata (party names, case titles, judges) "

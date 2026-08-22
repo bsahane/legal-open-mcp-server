@@ -1,5 +1,12 @@
 # Performance Optimization Plan — Legal MCP Server
 
+> **STATUS: IMPLEMENTED & ARCHIVED (2026-08-22).** Both optimizations shipped,
+> in improved form: the concurrency patch uses a semaphore around a single
+> `asyncio.gather` (no batch barriers) with per-citation progress reporting,
+> and the cache is a `diskcache` store in
+> `legal_mcp_server/src/cache.py` wired into both case-law search and citation
+> verification. Kept for design rationale only; do not apply as-is.
+
 ## Optimization 1: `asyncio.gather` Concurrency Patch (PRIMARY)
 
 **Problem:** `verify_all_citations` (in `legal_mcp_server/src/tools/research_tools.py`, lines 680-733) processes citations one-at-a-time in a `for` loop. Each iteration calls `_verify_case_citation_dual` which makes an HTTP request — meaning only 1 network call happens at a time. With 10 case citations, this is 10 sequential round-trips.

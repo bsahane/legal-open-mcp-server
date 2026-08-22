@@ -139,12 +139,55 @@ def _recent() -> dict:
     return {"status": "ok", "returncode": 0}
 
 
+def _fts_rebuild() -> dict:
+    """Rebuild the BM25 FTS index over the freshly synced corpus.
+
+    Search silently falls back to a slower LIKE scan whenever any synced
+    metadata parquet is newer than ``data/case_law/fts/corpus.duckdb``, so
+    the nightly job must refresh the index or every search the next day
+    pays the fallback cost until someone runs ``make fts`` by hand. Runs
+    after all judgment sources (open data + archives) are final so a single
+    rebuild covers them.
+    """
+    try:
+        from legal_mcp_server.src.sources import case_law, open_judgments
+
+        if case_law.active_backend() != "open_data":
+            return {
+                "status": "skipped",
+                "reason": f"backend is '{case_law.active_backend()}'",
+            }
+        client = open_judgments.get_client()
+        if client._fts_available():
+            log.info("FTS index already fresh; skipping rebuild")
+            return {"status": "ok", "rebuilt": False}
+        log.info("Rebuilding FTS index over the synced corpus")
+        summary = client.build_fts_index(force=True)
+        log.info("FTS index rebuilt: %d rows", summary.get("rows", 0))
+        return {
+            "status": "ok",
+            "rebuilt": True,
+            "rows": summary.get("rows"),
+            "path": summary.get("path"),
+        }
+    except Exception as exc:
+        log.error("FTS rebuild failed: %s", exc)
+        return {"status": "error", "error": str(exc)}
+
+
 def main() -> int:
-    report = {
+    """Run every sync step and print a JSON report of the outcomes.
+
+    Returns:
+        0 unless the open-data case-law sync itself failed; failures in the
+        other steps are reported in the JSON but do not change the exit code.
+    """
+    report: dict = {
         "date": date.today().isoformat(),
         "case_law": _case_law(),
         "historical": _historical(),
         "recent": _recent(),
+        "fts_index": _fts_rebuild(),
         "statutes": _statutes(),
     }
     print(json.dumps(report, indent=2, default=str))

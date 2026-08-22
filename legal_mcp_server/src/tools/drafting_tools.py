@@ -105,7 +105,7 @@ def _environment() -> Environment:
         undefined=StrictUndefined,
         trim_blocks=True,
         lstrip_blocks=True,
-        autoescape=False,  # plain-text legal documents, not HTML
+        autoescape=False,  # nosec B701 - plain-text legal documents, not HTML
         keep_trailing_newline=True,
         bytecode_cache=FileSystemBytecodeCache(str(cache_dir), "%s.cache"),
         auto_reload=False,  # call reload_templates() when templates change
@@ -657,8 +657,11 @@ def _sentence_pattern(english: str) -> str:
 
 
 def _substitute(sentence: str, captured: Dict[str, str]) -> str:
-    """Fill ``{{ name }}`` placeholders in a translated sentence with the
-    values captured from the English draft."""
+    """Fill ``{{ name }}`` placeholders in a translated sentence.
+
+    Values come from the facts captured from the English draft; unknown
+    placeholders are left verbatim so gaps stay visible.
+    """
     import re
 
     return re.sub(
@@ -673,9 +676,11 @@ def translate_document(
     target_language: str,
     source_language: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """Translate the static, templated prose of a rendered draft into a
-    supported Indian language, leaving names, addresses, amounts, case numbers
-    and legal citations untouched.
+    """Translate the static prose of a rendered draft into another language.
+
+    Only templated prose is translated into a supported Indian language;
+    names, addresses, amounts, case numbers and legal citations are left
+    untouched.
 
     TOOL_NAME=translate_document
     DISPLAY_NAME=Translate Draft Document

@@ -43,6 +43,13 @@ logger = get_python_logger()
 
 S3_NAMESPACE = "{http://s3.amazonaws.com/doc/2006-03-01/}"
 
+#: HTTP statuses worth retrying with backoff: throttling and transient
+#: upstream failures. Any other status is returned to the caller unchanged.
+RETRYABLE_STATUSES = frozenset({429, 500, 502, 503, 504})
+
+#: Attempts made by the S3/PDF fetch helper before giving up.
+MAX_RETRIES = 3
+
 ATTRIBUTION = (
     "Source: Indian Supreme Court / High Court Judgments open dataset "
     "(AWS Open Data, maintained by Dattam Labs), licensed CC-BY-4.0. "
@@ -306,21 +313,21 @@ class OpenJudgmentsClient:
         return self.root / "pdf-cache"
 
     def _sc_glob(self) -> str:
-        """DuckDB glob for synced Supreme Court metadata."""
+        """Glob for synced Supreme Court metadata, DuckDB-flavoured."""
         return str(self.sc_metadata_dir / "year=*" / "metadata.parquet")
 
     def _hc_glob(self) -> str:
-        """DuckDB glob for synced High Court metadata."""
+        """Glob for synced High Court metadata, DuckDB-flavoured."""
         return str(
             self.hc_metadata_dir / "year=*" / "court=*" / "bench=*" / "metadata.parquet"
         )
 
     def _historical_glob(self) -> str:
-        """DuckDB glob for the digitized pre-1950 corpus (per-court dirs)."""
+        """Glob for the digitized pre-1950 corpus, per-court dirs."""
         return str(self.root / "historical" / "*" / "metadata.parquet")
 
     def _recent_glob(self) -> str:
-        """DuckDB glob for the recently-published corpus (per-court dirs)."""
+        """Glob for the recently-published corpus, per-court dirs."""
         return str(self.root / "recent" / "*" / "metadata.parquet")
 
     def synced_courts(self) -> Dict[str, List[int]]:
@@ -388,9 +395,10 @@ class OpenJudgmentsClient:
             if token:
                 params["continuation-token"] = token
 
-            response = await client.get(endpoint, params=params)
+            response = await self._get_with_retry(client, endpoint, params=params)
             response.raise_for_status()
-            root = ElementTree.fromstring(response.text)
+            # XML from the public AWS S3 listing API over HTTPS; no untrusted input.
+            root = ElementTree.fromstring(response.text)  # nosec B314
 
             for contents in root.findall(f"{S3_NAMESPACE}Contents"):
                 key_el = contents.find(f"{S3_NAMESPACE}Key")
@@ -480,7 +488,7 @@ class OpenJudgmentsClient:
 
         target.parent.mkdir(parents=True, exist_ok=True)
         url = f"{self._endpoint(bucket)}/{key}"
-        response = await client.get(url)
+        response = await self._get_with_retry(client, url)
         response.raise_for_status()
         target.write_bytes(response.content)
         return True, len(response.content)
@@ -596,6 +604,55 @@ class OpenJudgmentsClient:
         if self._http is None:
             self._http = httpx.AsyncClient(timeout=self.timeout, follow_redirects=True)
         return self._http
+
+    async def _get_with_retry(
+        self,
+        client: httpx.AsyncClient,
+        url: str,
+        params: Optional[Dict[str, str]] = None,
+    ) -> httpx.Response:
+        """GET a remote URL with exponential backoff on transient failures.
+
+        The public S3 buckets and court PDF endpoints occasionally throttle
+        or blip; a one-shot fetch turns that into a hard failure of an
+        otherwise routine sync or document read. Network errors and
+        429/5xx responses are retried; any other status is returned
+        immediately so callers keep their own handling (e.g. the 404 path
+        in :meth:`get_document`).
+
+        Args:
+            client: Shared HTTP client.
+            url: Endpoint to fetch.
+            params: Optional query parameters.
+
+        Returns:
+            The response for a non-retryable outcome.
+
+        Raises:
+            SourceUnavailable: When every attempt fails.
+        """
+        last_error = ""
+        for attempt in range(MAX_RETRIES):
+            try:
+                response = await client.get(url, params=params)
+            except httpx.HTTPError as exc:
+                last_error = f"{type(exc).__name__}: {exc}"
+                logger.warning(
+                    f"Fetch failed (attempt {attempt + 1}/{MAX_RETRIES}): {url}: {exc}"
+                )
+            else:
+                if response.status_code not in RETRYABLE_STATUSES:
+                    return response
+                last_error = f"HTTP {response.status_code}"
+                logger.warning(
+                    f"Fetch got {response.status_code} "
+                    f"(attempt {attempt + 1}/{MAX_RETRIES}): {url}"
+                )
+            if attempt < MAX_RETRIES - 1:
+                await asyncio.sleep(2**attempt)
+        raise SourceUnavailable(
+            f"{url} could not be fetched after {MAX_RETRIES} attempts ({last_error})."
+        )
 
     # ------------------------------------------------------------------
     # Full-text search index
@@ -983,6 +1040,7 @@ class OpenJudgmentsClient:
         to_date: Optional[str] = None,
         judge: Optional[str] = None,
         limit: int = 20,
+        page: int = 0,
     ) -> List[SearchResult]:
         """Search synced case-law metadata.
 
@@ -996,17 +1054,19 @@ class OpenJudgmentsClient:
             from_date: Inclusive lower bound, ``YYYY-MM-DD``.
             to_date: Inclusive upper bound, ``YYYY-MM-DD``.
             judge: Restrict to judgments by a judge whose name contains this.
-            limit: Maximum results.
+            limit: Maximum results per page.
+            page: Zero-based page number into the ranked result set.
 
         Returns:
             Ranked search results, most recent first.
         """
         scope = resolve_court(court) or "all"
+        offset = max(0, page) * max(0, limit)
 
         if self._fts_available():
             try:
                 return await self._search_fts(
-                    scope, query, court, from_date, to_date, judge, limit
+                    scope, query, court, from_date, to_date, judge, limit, offset
                 )
             except Exception as exc:  # noqa: BLE001 - fall back to LIKE
                 logger.warning("FTS search failed, falling back to LIKE scan: %s", exc)
@@ -1038,8 +1098,10 @@ class OpenJudgmentsClient:
 
             ORDER BY try_cast(decision_date AS DATE) DESC NULLS LAST
             LIMIT ?
+            OFFSET ?
         """
         params.append(limit)
+        params.append(offset)
 
         def _run() -> List[Dict[str, Any]]:
             con = self._connect()
@@ -1059,6 +1121,7 @@ class OpenJudgmentsClient:
         to_date: Optional[str],
         judge: Optional[str],
         limit: int,
+        offset: int = 0,
     ) -> List[SearchResult]:
         """BM25-ranked search over the built FTS index.
 
@@ -1104,8 +1167,9 @@ class OpenJudgmentsClient:
             ORDER BY _score DESC NULLS LAST,
                      try_cast(c.decision_date AS DATE) DESC NULLS LAST
             LIMIT ?
+            OFFSET ?
         """
-        params = [fts_query, fts_query, *params, limit]
+        params = [fts_query, fts_query, *params, limit, offset]
 
         def _run() -> List[Dict[str, Any]]:
             con = self._connect_fts()
@@ -1287,7 +1351,7 @@ class OpenJudgmentsClient:
         if not cached.exists() or cached.stat().st_size == 0:
             cached.parent.mkdir(parents=True, exist_ok=True)
             client = self._http_client()
-            response = await client.get(url)
+            response = await self._get_with_retry(client, url)
             if response.status_code == 404:
                 raise SourceUnavailable(
                     f"No PDF published for {doc_id} at {url}. The metadata row "

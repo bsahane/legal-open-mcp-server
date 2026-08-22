@@ -131,7 +131,7 @@ REMOTE_ACTS: List[Dict[str, Any]] = [
 
 def fetch_json(url: str) -> Any:
     """Download and parse a JSON document."""
-    with urllib.request.urlopen(url, timeout=60) as response:  # noqa: S310
+    with urllib.request.urlopen(url, timeout=60) as response:  # noqa: S310  # nosec B310 - https-only corpus URLs
         return json.loads(response.read().decode("utf-8"))
 
 

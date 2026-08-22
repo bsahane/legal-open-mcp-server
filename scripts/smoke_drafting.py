@@ -1,9 +1,13 @@
+#!/usr/bin/env python3
+"""Smoke-test draft_document over every template in English and Hindi."""
+
 import sys
+from typing import Any, cast
 
 sys.path.insert(0, ".")
 from legal_mcp_server.src.tools import drafting_tools
 
-FACTS = {
+FACTS: dict[str, Any] = {
     "writ_petition": {
         "court_place": "BOMBAY",
         "petitioner_name": "A Test",
@@ -168,7 +172,7 @@ FACTS = {
 
 for key, params in FACTS.items():
     for lang in ("en", "hi"):
-        r = drafting_tools.draft_document(key, dict(params), language=lang)
+        r = drafting_tools.draft_document(key, cast(dict, params), language=lang)
         status = r.get("status")
         if status != "success":
             print(f"FAIL {key}/{lang}: {status} :: {r.get('message', r.get('error'))}")

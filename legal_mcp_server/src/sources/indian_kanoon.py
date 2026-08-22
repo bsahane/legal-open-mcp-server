@@ -4,7 +4,8 @@ Indian Kanoon indexes roughly 30 million Indian judgments and is the primary
 case-law source for this server. Every call is metered and billed, so this
 module adds three things on top of the raw HTTP API:
 
-* a per-day spend cap, enforced before the request goes out;
+* a per-day spend cap, enforced before the request goes out and mirrored to
+  disk so restarting the server cannot bypass it;
 * an in-process response cache, so repeated lookups within a session are free;
 * a uniform ``SourceUnavailable`` failure mode, so tools can report honestly
   that they could not consult the source instead of answering from memory.
@@ -16,9 +17,12 @@ header, per the official ikapi.py reference client.
 from __future__ import annotations
 
 import asyncio
+import json
+import os
 import time
 from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 from urllib.parse import quote_plus
 
@@ -39,6 +43,10 @@ CACHE_TTL_SECONDS = 60 * 60 * 6
 REQUEST_TIMEOUT_SECONDS = 30.0
 MAX_RETRIES = 3
 
+#: Name of the JSON file mirroring the day's spend under
+#: ``<LEGAL_DATA_PATH>/cache/``.
+LEDGER_FILENAME = "indian_kanoon_spend.json"
+
 
 class SourceUnavailable(RuntimeError):
     """Raised when Indian Kanoon cannot be consulted at all.
@@ -54,11 +62,59 @@ class BudgetExceeded(SourceUnavailable):
 
 @dataclass
 class SpendLedger:
-    """Tracks Indian Kanoon spend for the current UTC day."""
+    """Tracks Indian Kanoon spend for the current UTC day.
+
+    When ``path`` is set, the day's totals are mirrored to disk after every
+    recorded call and adopted back on construction, so a server restart
+    cannot reset today's spend and slip past the configured cap. I/O
+    problems are logged and swallowed: an unreadable ledger must never
+    block a billable call outright.
+    """
 
     day: date = field(default_factory=lambda: datetime.now(timezone.utc).date())
     spent_inr: float = 0.0
     calls: int = 0
+    path: Optional[Path] = None
+
+    def __post_init__(self) -> None:
+        """Adopt today's persisted totals from disk when a path is set."""
+        self._load()
+
+    def _load(self) -> None:
+        """Adopt today's persisted totals, ignoring stale or broken state."""
+        if self.path is None:
+            return
+        try:
+            raw = json.loads(self.path.read_text())
+            if date.fromisoformat(raw["day"]) == self.day:
+                self.spent_inr = float(raw["spent_inr"])
+                self.calls = int(raw["calls"])
+        except FileNotFoundError:
+            return
+        except Exception as e:
+            logger.warning(
+                f"Ignoring unreadable Indian Kanoon spend ledger {self.path}: {e}"
+            )
+
+    def _save(self) -> None:
+        """Mirror the current totals to disk atomically; never raise."""
+        if self.path is None:
+            return
+        try:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            tmp = self.path.with_suffix(self.path.suffix + ".tmp")
+            tmp.write_text(
+                json.dumps(
+                    {
+                        "day": self.day.isoformat(),
+                        "spent_inr": round(self.spent_inr, 4),
+                        "calls": self.calls,
+                    }
+                )
+            )
+            os.replace(tmp, self.path)
+        except Exception as e:
+            logger.warning(f"Could not persist Indian Kanoon spend ledger: {e}")
 
     def _roll_over(self) -> None:
         today = datetime.now(timezone.utc).date()
@@ -66,6 +122,7 @@ class SpendLedger:
             self.day = today
             self.spent_inr = 0.0
             self.calls = 0
+            self._save()
 
     def check(self, cost_inr: float, budget_inr: float) -> None:
         """Raise if spending ``cost_inr`` would breach ``budget_inr``.
@@ -91,6 +148,7 @@ class SpendLedger:
         self._roll_over()
         self.spent_inr += cost_inr
         self.calls += 1
+        self._save()
 
     def snapshot(self) -> Dict[str, Any]:
         """Return the current day's spend for reporting in tool output."""
@@ -187,6 +245,7 @@ class IndianKanoonClient:
         api_key: Optional[str] = None,
         base_url: Optional[str] = None,
         transport: Optional[httpx.AsyncBaseTransport] = None,
+        ledger_path: Optional[Path] = None,
     ):
         """Create a client.
 
@@ -194,6 +253,9 @@ class IndianKanoonClient:
             api_key: Indian Kanoon token. Defaults to the configured key.
             base_url: API base URL. Defaults to the configured URL.
             transport: Optional httpx transport, used to inject mocks in tests.
+            ledger_path: Optional file the spend ledger mirrors to. Leave
+                ``None`` for an in-memory-only ledger (tests); the shared
+                client passes a real path so restarts cannot reset spend.
         """
         self._api_key = (
             api_key if api_key is not None else settings.INDIAN_KANOON_API_KEY
@@ -202,7 +264,7 @@ class IndianKanoonClient:
         self._transport = transport
         self._cache: Dict[str, tuple[float, Any]] = {}
         self._lock = asyncio.Lock()
-        self.ledger = SpendLedger()
+        self.ledger = SpendLedger(path=ledger_path)
         # Long-lived client so connection pools and TLS sessions survive across
         # calls; creating a fresh AsyncClient per request forces a TCP+TLS
         # handshake every time. Created lazily so tests that never hit the
@@ -486,11 +548,16 @@ def get_client() -> IndianKanoonClient:
     """Return the process-wide Indian Kanoon client.
 
     Sharing one instance keeps the response cache and the spend ledger
-    effective across tool calls within a session.
+    effective across tool calls within a session. The shared client also
+    persists the day's spend under ``<LEGAL_DATA_PATH>/cache/`` so a
+    restart cannot bypass the daily cap; directly constructed clients
+    (tests) keep an in-memory-only ledger.
     """
     global _client
     if _client is None:
-        _client = IndianKanoonClient()
+        _client = IndianKanoonClient(
+            ledger_path=Path(settings.LEGAL_DATA_PATH) / "cache" / LEDGER_FILENAME,
+        )
     return _client
 
 

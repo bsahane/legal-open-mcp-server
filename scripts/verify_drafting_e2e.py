@@ -1,3 +1,10 @@
+#!/usr/bin/env python3
+"""End-to-end drafting check against a locally started MCP server.
+
+Boots ``legal_mcp_server.src.main``, opens an MCP session over streamable
+HTTP and drafts one document per template/language, printing PASS/FAIL.
+"""
+
 import json
 import subprocess
 import sys
@@ -6,7 +13,7 @@ import urllib.request
 
 proc = subprocess.Popen(
     [sys.executable, "-m", "legal_mcp_server.src.main"],
-    stdout=open("/tmp/mcp_srv.log", "w"),
+    stdout=open("/tmp/mcp_srv.log", "w"),  # nosec B108 - throwaway local smoke log
     stderr=subprocess.STDOUT,
     cwd=".",
 )
@@ -14,6 +21,7 @@ try:
     url = "http://127.0.0.1:5001/mcp"
 
     def post(obj, headers=None, return_headers=False):
+        """POST a JSON-RPC body; returns the text (and headers if asked)."""
         h = {
             "Content-Type": "application/json",
             "Accept": "application/json, text/event-stream",
@@ -21,7 +29,7 @@ try:
         if headers:
             h.update(headers)
         req = urllib.request.Request(url, data=json.dumps(obj).encode(), headers=h)
-        with urllib.request.urlopen(req, timeout=10) as r:
+        with urllib.request.urlopen(req, timeout=10) as r:  # nosec B310 - localhost
             if return_headers:
                 return r.read().decode(), dict(r.headers)
             return r.read().decode()
@@ -65,6 +73,7 @@ try:
         sys.exit(1)
 
     def parse_sse(text):
+        """Return the payload of the last SSE ``data:`` line."""
         data = None
         for line in text.splitlines():
             if line.startswith("data:"):

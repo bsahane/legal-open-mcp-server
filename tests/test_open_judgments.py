@@ -616,3 +616,94 @@ class TestFullTextIndex:
         # Both terms must appear; only VIJAY SINGH carries "Appeal".
         hits = await corpus.search("Appeal Bihar", court="Supreme Court")
         assert [h.doc_id for h in hits] == ["sc:2024:2024_10_108_125"]
+
+
+def _pagination_rows(count: int) -> List[Dict[str, Any]]:
+    """Build SC-shaped rows whose dates sort in a known order."""
+    rows: List[Dict[str, Any]] = []
+    for i in range(1, count + 1):
+        rows.append(
+            {
+                "title": f"PAGINATION MATTER {i} versus THE STATE",
+                "petitioner": f"PAGINATION MATTER {i}",
+                "respondent": "THE STATE",
+                "description": f"Pagination fixture judgment number {i}.",
+                "judge": "TEST JUDGE",
+                "citation": f"[2024] 1 S.C.R. {i}",
+                "cnr": f"SCIN010000{i:02d}2024",
+                "decision_date": f"{i:02d}-01-2024",
+                "disposal_nature": "Allowed",
+                "court": "Supreme Court of India",
+                "nc_display": f"2024INSC10{i:02d}",
+                "path": f"2024_1_{i}_{i}",
+                "year": "2024",
+            }
+        )
+    return rows
+
+
+@pytest.fixture
+def paged_corpus(tmp_path: Path):
+    """A synced-looking SC-only corpus with five matching judgments."""
+    _write_parquet(
+        _pagination_rows(5),
+        tmp_path / "sc" / "metadata" / "year=2024" / "metadata.parquet",
+    )
+    client = open_judgments.OpenJudgmentsClient(data_path=str(tmp_path))
+    with patch.object(open_judgments, "get_client", return_value=client):
+        yield client
+
+
+class TestPagination:
+    """Deep result sets are reachable page by page on the free backend."""
+
+    @pytest.mark.asyncio
+    async def test_like_pages_are_disjoint_windows(self, paged_corpus):
+        """Pages tile the ranked results without overlap or gaps."""
+        pages = [
+            await paged_corpus.search("pagination matter", limit=2, page=p)
+            for p in range(3)
+        ]
+        after_last = await paged_corpus.search("pagination matter", limit=2, page=3)
+
+        assert [r.doc_id for r in pages[0]] == [
+            "sc:2024:2024_1_5_5",
+            "sc:2024:2024_1_4_4",
+        ]
+        ids = [r.doc_id for page in pages for r in page]
+        assert len(ids) == 5
+        assert len(set(ids)) == 5
+        assert after_last == []
+
+    @pytest.mark.asyncio
+    async def test_fts_pages_are_disjoint_windows(self, paged_corpus):
+        """The BM25 path paginates identically to the LIKE fallback."""
+        try:
+            build = paged_corpus.build_fts_index(force=True)
+        except Exception as exc:  # noqa: BLE001 - extension may be unavailable
+            pytest.skip(f"DuckDB FTS extension not usable here: {exc}")
+        assert build["status"] == "success"
+
+        pages = [
+            await paged_corpus.search("pagination matter", limit=2, page=p)
+            for p in range(3)
+        ]
+        ids = [r.doc_id for page in pages for r in page]
+        assert len(ids) == 5
+        assert len(set(ids)) == 5
+
+    @pytest.mark.asyncio
+    async def test_negative_page_clamps_to_first(self, paged_corpus):
+        """A negative page is treated as the first page, not an error."""
+        negative = await paged_corpus.search("pagination matter", limit=2, page=-3)
+        first = await paged_corpus.search("pagination matter", limit=2, page=0)
+        assert [r.doc_id for r in negative] == [r.doc_id for r in first]
+
+    @pytest.mark.asyncio
+    async def test_facade_passes_page_through(self, paged_corpus):
+        """The backend-agnostic layer reports and honours the requested page."""
+        payload = await case_law.search("pagination matter", limit=2, page=1)
+
+        assert payload["page"] == 1
+        direct = await paged_corpus.search("pagination matter", limit=2, page=1)
+        assert [r["doc_id"] for r in payload["results"]] == [r.doc_id for r in direct]

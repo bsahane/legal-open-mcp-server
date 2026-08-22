@@ -244,18 +244,27 @@ legal-mcp-server/
 
 - **`main.py`**: Application entry point with configuration validation, error handling, and uvicorn server startup
 - **`api.py`**: FastAPI application setup with transport protocol selection (HTTP/SSE/streamable-HTTP) and health endpoints
-- **`mcp.py`**: Core MCP server class that registers tools using FastMCP decorators
+- **`mcp.py`**: Core MCP server class that registers tool groups using FastMCP decorators
 - **`settings.py`**: Environment-based configuration using Pydantic BaseSettings with validation
-- **`tools/`**: MCP tool implementations demonstrating arithmetic, prompts, and resource access patterns
+- **`tools/`**: The seven legal MCP tool groups (research, statutes, deadlines, court, drafting, documents, matters) — see [Tools Reference](tools.md)
+- **`domain/`**: Offline legal logic — citation parsing, limitation periods, court holidays, criminal-code mapping
+- **`sources/`**: Data backends — open-data judgment corpus (Parquet + DuckDB FTS), Indian Kanoon API, India Code, eCourts, embeddings
+- **`cache.py`**: Disk-backed 24-hour cache for case-law searches and citation verifications
 - **`oauth/`**: OAuth 2.0 integration — controller, handler, models, routes, service (see [Authentication Guide](authentication.md))
 - **`storage/storage_service.py`**: PostgreSQL-backed `StorageService` for persistent token and client storage. Used by the OAuth layer to store authorization codes, access tokens, refresh tokens, and registered clients. Requires PostgreSQL when auth is enabled; initialized at server startup via `oauth/service.py`
 - **`utils/pylogger.py`**: Structured JSON logging using structlog with comprehensive processors
 
 ## Current MCP Tools
 
-1. **`multiply_numbers`**: Demonstrates basic arithmetic operations with error handling
-2. **`get_redhat_logo`**: Shows resource access patterns with base64 encoding
-3. **`generate_code_review_prompt`**: Illustrates prompt generation for code analysis
+42 tools in seven groups (full reference with inputs/outputs: [tools.md](tools.md)):
+
+1. **Research** (`research_tools.py`): `search_case_law`, `get_judgment`, `search_within_judgment`, `find_related_proceedings`, `verify_citation`, `verify_all_citations`, `build_research_memo`, `sync_case_law`, `case_law_status`
+2. **Statutes** (`statute_tools.py`): `list_bundled_acts`, `get_section`, `search_statute`, `which_criminal_code_applies`, `map_criminal_code_section`
+3. **Deadlines** (`deadline_tools.py`): `compute_deadline`, `compute_limitation`, `compute_cheque_bounce_timeline`, `find_limitation_rule`, `list_limitation_rules`, `get_court_holidays`
+4. **Court** (`court_tools.py`): `determine_jurisdiction`, `court_directory`, `get_case_status`
+5. **Drafting** (`drafting_tools.py`): `list_templates`, `draft_document`, `review_draft`, `translate_document`, `get_document_languages`
+6. **Documents** (`document_tools.py`): `ingest_document`, `search_my_documents`, `get_document`, `list_my_documents`, `extract_clauses`, `review_contract`
+7. **Matters** (`matter_tools.py`): `create_matter`, `list_matters`, `get_matter`, `update_matter`, `add_hearing`, `list_upcoming_hearings`, `get_matter_timeline`, `log_matter_event`
 
 ## HTTP Endpoints
 

@@ -181,7 +181,10 @@ def provider_status() -> dict:
                 "Embeddings are disabled, so document search uses Postgres "
                 "full-text matching only. Exact terms and citations work well; "
                 "conceptual queries such as 'the clause about early exit' will "
-                "not. Set EMBEDDING_PROVIDER=local for offline semantic search."
+                "not. To enable semantic search offline, install the 'local' "
+                "extra (fastembed) and set EMBEDDING_PROVIDER=local; for the "
+                "Voyage API, install the 'voyage' extra, set "
+                "EMBEDDING_PROVIDER=voyage and provide VOYAGE_API_KEY."
             ),
         }
 

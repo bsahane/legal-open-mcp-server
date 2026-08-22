@@ -73,6 +73,7 @@ class ArchiveClient:
     """Polite HTTP client for the Bombay High Court archive."""
 
     def __init__(self, delay: float = POLITE_DELAY_SECONDS):
+        """Create a polite client; ``delay`` is the wait between requests."""
         self.delay = delay
         tls = ssl.create_default_context()
         legacy = getattr(ssl, "OP_LEGACY_SERVER_CONNECT", 0)
@@ -105,6 +106,7 @@ class ArchiveClient:
         return None
 
     def close(self) -> None:
+        """Release the underlying HTTP client."""
         self._client.close()
 
 
@@ -370,7 +372,10 @@ def harvest_diwani(client: ArchiveClient, download: bool) -> List[Case]:
     ):
         if "list" not in href:
             continue
-        year = int(re.search(r"(\d{4})", href).group(1))
+        year_match = re.search(r"(\d{4})", href)
+        if year_match is None:
+            continue
+        year = int(year_match.group(1))
         list_url = _abs(index_url, href)
         print(f"[DIWANI] {year} -> {list_url}")
         cases.extend(
@@ -437,6 +442,7 @@ def write_metadata(cases: List[Case]) -> Path:
 
 
 def main() -> int:
+    """Scrape the archive; see the module docstring for usage."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--download",
