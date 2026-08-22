@@ -43,7 +43,7 @@ dependencies = [
     "python-dateutil==2.9.0.post0",
     "rapidfuzz==3.10.1",
     "pgvector==0.3.6",
-    "pyyaml==6.0.2",
+    "pyyaml==6.0.3",
     "beautifulsoup4==4.12.3",
     # Queries the free open-data judgment corpus (Parquet) locally.
     "duckdb==1.5.5",
