@@ -5,6 +5,7 @@ research, drafting, matter-management and document-review tools for Indian
 law. It uses FastMCP to register and manage MCP capabilities.
 """
 
+import inspect
 from typing import Any, Callable, Dict, List, Optional
 
 from fastmcp import FastMCP
@@ -120,6 +121,36 @@ def _court_tools() -> List[Callable[..., Any]]:
     return court_tools.TOOLS
 
 
+# Structured docstring keys worth their tokens on the wire. TOOL_NAME and
+# DISPLAY_NAME duplicate name/title, OUTPUT_DESCRIPTION and EXAMPLES only
+# matter after the tool is chosen, and the Google Args/Returns tail repeats
+# INPUT_DESCRIPTION. Tool definitions are resent on every model request.
+_WIRE_KEYS = (
+    "USECASE",
+    "INSTRUCTIONS",
+    "INPUT_DESCRIPTION",
+    "PREREQUISITES",
+    "RELATED_TOOLS",
+)
+
+
+def _wire_description(fn: Callable[..., Any]) -> str:
+    """Return the compact tool description sent to MCP clients.
+
+    Keeps the one-line summary plus the selection-relevant structured keys
+    from the docstring; the full docstring stays in source for developers.
+    """
+    lines = inspect.cleandoc(fn.__doc__ or "").splitlines()
+    out = [lines[0]] if lines and "=" not in lines[0] else []
+    for line in lines:
+        key, _, value = line.partition("=")
+        if key in _WIRE_KEYS and not (
+            key == "PREREQUISITES" and value.startswith("None")
+        ):
+            out.append(line)
+    return "\n".join(out)
+
+
 def _annotations_for(fn: Callable[..., Any]) -> Optional[ToolAnnotations]:
     """Return the Connectors-Directory annotations registered for a tool.
 
@@ -197,7 +228,13 @@ class LegalMCPServer:
         for group, loader in TOOL_GROUPS.items():
             try:
                 for fn in loader():
-                    self.mcp.tool(annotations=_annotations_for(fn))(fn)
+                    # output_schema=None: every tool returns Dict[str, Any], so
+                    # the generated schema is an empty object that costs tokens.
+                    self.mcp.tool(
+                        description=_wire_description(fn),
+                        output_schema=None,
+                        annotations=_annotations_for(fn),
+                    )(fn)
                     registered += 1
             except Exception as e:
                 logger.error(f"Failed to register '{group}' tools: {e}")

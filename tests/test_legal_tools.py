@@ -1005,3 +1005,23 @@ class TestErrorContract:
             result = call()
             assert "status" in result
             assert result["status"] in {"error", "not_found", "unavailable"}
+
+
+class TestWireDescription:
+    """Tool definitions are resent on every request, so keep them lean."""
+
+    def test_drops_examples_and_developer_tail(self):
+        """Only selection-relevant keys reach the client."""
+        from legal_mcp_server.src.mcp import _wire_description
+
+        for loader in TOOL_GROUPS.values():
+            for tool in loader():
+                desc = _wire_description(tool)
+                assert "USECASE=" in desc and "INPUT_DESCRIPTION=" in desc
+                for dropped in (
+                    "EXAMPLES=",
+                    "TOOL_NAME=",
+                    "OUTPUT_DESCRIPTION=",
+                    "Args:",
+                ):
+                    assert dropped not in desc, f"{tool.__name__} leaks {dropped}"
