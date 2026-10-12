@@ -57,7 +57,7 @@ dependencies = [
 voyage = ["voyageai==0.3.2"]
 local = ["fastembed==0.4.2"]
 dev = [
-    "pytest==8.4.1",
+    "pytest==9.1.1",
     "pytest-asyncio==1.0.0",
     "pytest-cov==6.2.1",
     "ruff==0.12.2",
