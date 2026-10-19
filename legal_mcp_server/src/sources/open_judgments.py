@@ -894,6 +894,12 @@ class OpenJudgmentsClient:
                 f"in {time.monotonic() - started:.1f}s"
             )
             out.execute("CREATE INDEX corpus_source ON corpus (_source)")
+            # Rowids 1..count are in decision-date order; search turns date
+            # filters into rowid ranges over exactly this span.
+            out.execute("CREATE TABLE fts_meta (key TEXT PRIMARY KEY, value INTEGER)")
+            out.execute(
+                "INSERT INTO fts_meta VALUES ('date_ordered_max_id', ?)", (count,)
+            )
             out.execute(
                 "CREATE TABLE fts_sources "
                 "(id INTEGER PRIMARY KEY, path TEXT UNIQUE, mtime_ns INTEGER)"
@@ -1538,7 +1544,8 @@ class OpenJudgmentsClient:
         re-checked with LIKE on the narrowed candidates. Returns ``None`` when
         nothing in the query is indexable; the caller then falls back to the
         LIKE scan. Queries matching more than ``FTS_RANK_LIMIT`` judgments
-        are listed newest first instead of ranked, flagged ``broad``.
+        (and not filtered by judge) are listed newest first instead of
+        ranked, flagged ``broad``.
         """
         conditions: List[str] = []
         params: List[Any] = []
@@ -1582,7 +1589,6 @@ class OpenJudgmentsClient:
                 expr += f' AND court_code : "{court_tokens}"'
             return expr
 
-        filtered = bool(judge or from_date or to_date)
         if judge:
             conditions.append("lower(c.judge) LIKE ?")
             params.append(f"%{judge.lower()}%")
@@ -1595,22 +1601,25 @@ class OpenJudgmentsClient:
         extra = "".join(f" AND {cond}" for cond in conditions)
 
         # Too broad to rank: BM25 scores every match (38s for "state", 10.7M
-        # hits). Rowids follow decision date (see _full_build), so walking
-        # exact-token matches by descending rowid lists the newest first in
-        # milliseconds. A window past the page is re-sorted on the real date
-        # to absorb the slight disorder incremental updates introduce.
-        # ponytail: judge/date filters keep the ranked path, since a selective
-        # filter could walk most of the corpus; bound the walk by rowid if
-        # filtered broad queries turn out to be common.
+        # hits). Rowids up to the last full build follow decision date (see
+        # _full_build), so walking exact-token matches by descending rowid
+        # lists the newest first in milliseconds; a date filter becomes a
+        # rowid range by binary search. Rows appended since the build sit
+        # above that range and are few, so they are scanned outright. A window
+        # past the page is re-sorted on the real date.
+        # ponytail: a judge filter keeps the ranked path, since a selective
+        # judge could walk most of the corpus.
+        walk = (
+            "SELECT c.* FROM corpus_fts JOIN corpus c ON c.id = corpus_fts.rowid "
+            f"WHERE corpus_fts MATCH ? AND corpus_fts.rowid BETWEEN ? AND ?{extra}"
+        )
         broad_sql = (
-            "WITH cand AS MATERIALIZED (SELECT c.* FROM corpus_fts "
-            "JOIN corpus c ON c.id = corpus_fts.rowid "
-            f"WHERE corpus_fts MATCH ?{extra} "
+            f"WITH cand AS MATERIALIZED (SELECT * FROM ({walk} "
             "ORDER BY corpus_fts.rowid DESC LIMIT ?) "
+            f"UNION ALL {walk}) "
             "SELECT * FROM cand ORDER BY decision_date DESC, id DESC "
             "LIMIT ? OFFSET ?"
         )
-        broad_params = [match(False), *params, offset + limit + 500, limit, offset]
 
         # Rank inside the FTS index and fetch corpus rows only for the page:
         # sorting on a corpus column (the old date tie-break) made SQLite read
@@ -1637,25 +1646,73 @@ class OpenJudgmentsClient:
 
         def _run() -> Tuple[bool, List[Dict[str, Any]]]:
             con = self._connect_fts()
-            broad = not filtered and (
+            bounds = None
+            if not judge and (
                 con.execute(
                     "SELECT count(*) FROM (SELECT 1 FROM corpus_fts "
                     "WHERE corpus_fts MATCH ? LIMIT ?)",
                     (match(False), FTS_RANK_LIMIT + 1),
                 ).fetchone()[0]
                 > FTS_RANK_LIMIT
-            )
-            sql, args = (
-                (broad_sql, broad_params) if broad else (ranked_sql, ranked_params)
-            )
+            ):
+                bounds = self._date_bounds(con, from_date, to_date)
+            if bounds is None:
+                sql, args = ranked_sql, ranked_params
+            else:
+                lo, hi, top = bounds
+                exact = match(False)
+                sql = broad_sql
+                args = [exact, lo, hi, *params, offset + limit + 500]
+                args += [exact, top + 1, 2**62, *params, limit, offset]
             cursor = con.execute(sql, args)
             columns = [d[0] for d in cursor.description]
-            return broad, [dict(zip(columns, row)) for row in cursor.fetchall()]
+            return bounds is not None, [
+                dict(zip(columns, row)) for row in cursor.fetchall()
+            ]
 
         broad, rows = await asyncio.to_thread(_run)
         results = SearchResults(self._row_to_result(row) for row in rows)
         results.broad = broad
         return results
+
+    @staticmethod
+    def _date_bounds(
+        con: sqlite3.Connection, from_date: Optional[str], to_date: Optional[str]
+    ) -> Optional[Tuple[int, int, int]]:
+        """Rowid range ``(lo, hi, top)`` covering a date window.
+
+        ``top`` is the last rowid of the date-ordered build; ``lo``/``hi``
+        bound the window within ``1..top`` by binary search on that order.
+        ``None`` when the index predates the recorded order.
+        """
+        try:
+            row = con.execute(
+                "SELECT value FROM fts_meta WHERE key = 'date_ordered_max_id'"
+            ).fetchone()
+        except sqlite3.DatabaseError:
+            return None
+        if row is None:
+            return None
+        top = int(row[0])
+
+        def first_id(after: str, strict: bool) -> int:
+            """Smallest id in 1..top dated >= ``after`` (> when ``strict``)."""
+            lo, hi = 1, top + 1
+            while lo < hi:
+                mid = (lo + hi) // 2
+                found = con.execute(
+                    "SELECT date(decision_date) FROM corpus WHERE id = ?", (mid,)
+                ).fetchone()
+                day = found[0] if found else None
+                if day is not None and (day > after if strict else day >= after):
+                    hi = mid
+                else:
+                    lo = mid + 1
+            return lo
+
+        lo = first_id(from_date, strict=False) if from_date else 1
+        hi = first_id(to_date, strict=True) - 1 if to_date else top
+        return lo, hi, top
 
     def _row_to_result(self, row: Dict[str, Any]) -> SearchResult:
         """Build a SearchResult from a metadata row dict."""

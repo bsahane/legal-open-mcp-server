@@ -26,7 +26,10 @@ This project uses [GitHub Releases](https://github.com/redhat-data-and-ai/legal-
   asking for narrower terms; BM25 had to score every match (15-35s for
   "india" or "criminal appeal"). The index assigns rowids in decision-date
   order so this is a cheap walk. Queries of only common words ("state") now
-  use the index instead of the full LIKE scan. Source files are stored as
+  use the index instead of the full LIKE scan. Date filters on broad
+  queries become rowid ranges (binary search over the date-ordered rowids
+  recorded in `fts_meta`), so they stay fast too; a judge filter keeps the
+  exact ranked path. Source files are stored as
   integer ids, shrinking the index by about 3 GB. Needs one full rebuild
   (`make fts`); the next update triggers it automatically.
 - uvicorn no longer loads websocket support (`ws="none"`); no MCP transport

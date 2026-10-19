@@ -840,6 +840,43 @@ class TestFullTextIndex:
         assert [h.date for h in page2] == ["2024-05-12"]
 
     @pytest.mark.asyncio
+    async def test_broad_query_date_filters_become_rowid_bounds(self, corpus):
+        """from/to dates bound the newest-first walk, including later appends."""
+        self._build(corpus)
+        appended = dict(SC_ROWS[1], decision_date="01-01-2020", path="tail_1")
+        _write_parquet(
+            [appended], corpus.sc_metadata_dir / "year=2020" / "metadata.parquet"
+        )
+        corpus.build_fts_index()  # incremental: lands above the dated span
+
+        with patch.object(open_judgments, "FTS_RANK_LIMIT", 1):
+            after = await corpus.search("Bihar", from_date="2024-06-01")
+            before = await corpus.search("Bihar", to_date="2024-06-01")
+            window = await corpus.search(
+                "Bihar", from_date="2024-01-01", to_date="2024-06-30"
+            )
+        assert after.broad and before.broad and window.broad
+        assert [h.date for h in after] == ["2024-09-25"]
+        assert [h.date for h in before] == ["2024-05-12", "2020-01-01"]
+        assert [h.date for h in window] == ["2024-05-12"]
+
+    @pytest.mark.asyncio
+    async def test_index_without_date_order_record_stays_ranked(self, corpus):
+        """An index built before fts_meta existed cannot bound by rowid."""
+        import sqlite3
+
+        self._build(corpus)
+        con = sqlite3.connect(corpus._fts_path())
+        con.execute("DROP TABLE fts_meta")
+        con.commit()
+        con.close()
+        corpus._close_duckdb_handles()
+        with patch.object(open_judgments, "FTS_RANK_LIMIT", 1):
+            hits = await corpus.search("Bihar")
+        assert hits.broad is False
+        assert len(hits) == 2
+
+    @pytest.mark.asyncio
     async def test_filtered_broad_query_stays_ranked(self, corpus):
         """A judge or date filter keeps the ranked path, which stays exact."""
         self._build(corpus)
