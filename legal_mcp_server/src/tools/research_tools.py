@@ -420,9 +420,24 @@ async def _verify_case_citation(citation: cit.Citation) -> Dict[str, Any]:
             ),
         }
 
-    # Fall back to searching party names and case titles.
+    # Fall back to searching party names and case titles, first scoped to the
+    # court and year the citation implies so a landmark judgment is not
+    # crowded out by later cases that quote its name. A report usually appears
+    # in the decision year or the next, so the window is year-1..year. If the
+    # scoped search finds nothing, widen to the unscoped search.
     query = citation.case_name or citation.search_query() or citation.normalized
-    payload = await case_law.search(query=query, limit=10)
+    court = citation.implied_court()
+    payload: Dict[str, Any] = {}
+    if court or citation.year:
+        payload = await case_law.search(
+            query=query,
+            court=court,
+            from_date=f"{citation.year - 1}-01-01" if citation.year else None,
+            to_date=f"{citation.year}-12-31" if citation.year else None,
+            limit=10,
+        )
+    if not payload.get("results"):
+        payload = await case_law.search(query=query, limit=10)
     candidates = payload.get("results", [])
 
     if not candidates:

@@ -489,6 +489,89 @@ class TestCitationVerificationCache:
         assert "no API key" in result["cost"]
 
 
+class TestCitationFallbackScoping:
+    """The title-search fallback uses the court and year a citation implies."""
+
+    SC_JUDGMENT = {
+        "title": "ARNESH KUMAR versus STATE OF BIHAR & ANR.",
+        "court": "Supreme Court of India",
+        "date": "2014-07-02",
+        "citation": "[2014] 8 S.C.R. 128",
+    }
+    HC_CASE_QUOTING_IT = {
+        "title": "CR. REV./1030/2014 of Sweta Kiran Vs State Of Bihar and Anr",
+        "court": "Patna High Court",
+        "date": "2018-01-15",
+        "citation": None,
+    }
+
+    def _fake_source(self, scoped_results):
+        """Return fakes for case_law.find_by_citation and case_law.search."""
+        calls = []
+
+        async def find_by_citation(citation):
+            return {"results": [], "exact": False, "backend": "open_data"}
+
+        async def search(query, court=None, from_date=None, to_date=None, limit=20):
+            calls.append((court, from_date, to_date))
+            if court:
+                return {"results": scoped_results, "backend": "open_data"}
+            return {"results": [self.HC_CASE_QUOTING_IT], "backend": "open_data"}
+
+        return calls, find_by_citation, search
+
+    @pytest.mark.asyncio
+    async def test_scc_citation_searches_supreme_court_in_report_year(self):
+        """Arnesh Kumar, (2014) 8 SCC 273 finds the SC judgment, not HC cases quoting it."""
+        from legal_mcp_server.src.domain import citations as cit
+
+        calls, find, search = self._fake_source([self.SC_JUDGMENT])
+        parsed = cit.extract_all("Arnesh Kumar v. State of Bihar, (2014) 8 SCC 273")[0]
+        case_law = research_tools.case_law
+        with (
+            patch.object(case_law, "find_by_citation", find),
+            patch.object(case_law, "search", search),
+        ):
+            result = await research_tools._verify_case_citation(parsed)
+
+        assert calls == [("Supreme Court", "2013-01-01", "2014-12-31")]
+        assert result["matches"][0]["court"] == "Supreme Court of India"
+        # SCC is not in the open dataset, so the citation itself stays unconfirmed.
+        assert result["verdict"] == research_tools.VERDICT_AMBIGUOUS
+
+    @pytest.mark.asyncio
+    async def test_empty_scoped_search_widens_to_all_courts(self):
+        """A miss in the implied court and years falls back to the unscoped search."""
+        from legal_mcp_server.src.domain import citations as cit
+
+        calls, find, search = self._fake_source([])
+        parsed = cit.extract_all("Arnesh Kumar v. State of Bihar, (2014) 8 SCC 273")[0]
+        case_law = research_tools.case_law
+        with (
+            patch.object(case_law, "find_by_citation", find),
+            patch.object(case_law, "search", search),
+        ):
+            result = await research_tools._verify_case_citation(parsed)
+
+        assert calls[-1] == (None, None, None)
+        assert result["matches"] == [self.HC_CASE_QUOTING_IT]
+
+    def test_implied_court_by_reporter(self):
+        """Single-court reporters imply their court; general reporters do not."""
+        from legal_mcp_server.src.domain import citations as cit
+
+        expected = {
+            "(2014) 8 SCC 273": "Supreme Court",
+            "AIR 2014 SC 2756": "Supreme Court",
+            "2021 SCC OnLine Bom 123": "Bombay High Court",
+            "(1998) 2 Bom CR 461": "Bombay High Court",
+            "2019 SCC OnLine Del 99": None,
+            "2014 Cri LJ 55": None,
+        }
+        for text, court in expected.items():
+            assert cit.extract_all(text)[0].implied_court() == court, text
+
+
 class TestDraftingTools:
     """Template rendering and draft review."""
 

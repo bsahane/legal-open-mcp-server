@@ -62,6 +62,13 @@ REPORTERS: Dict[str, str] = {
     "supreme": "SCC",
 }
 
+# Reporters that publish only one court's judgments, so a citation in them
+# tells us which court to search.
+SUPREME_COURT_REPORTERS = frozenset(
+    {"SCC", "SCR", "SCC (Cri)", "INSC", "INSC (neutral)"}
+)
+BOMBAY_REPORTERS = frozenset({"Bom CR", "Bom LR", "Mh LJ", "ALL MR"})
+
 # Statutes referred to by initials often enough to be worth expanding, so that
 # "s. 420 IPC" and "section 420 of the Indian Penal Code" reconcile.
 STATUTE_ABBREVIATIONS: Dict[str, str] = {
@@ -136,6 +143,23 @@ class Citation:
                 return f"{self.case_name} {self.normalized}"
             return self.normalized
         return f"{self.section} {self.statute}" if self.statute else self.normalized
+
+    def implied_court(self) -> Optional[str]:
+        """The court a case citation's reporter implies, if it is unambiguous.
+
+        SCC, SCR and INSC report only the Supreme Court; ``AIR 2014 SC 2756``
+        and ``2019 SCC OnLine SC 1234`` name it in the court slot. Bombay
+        reporters and ``SCC OnLine Bom`` imply the Bombay High Court. AIR and
+        SCC OnLine with any other court token, or other reporters, return None.
+        """
+        if self.kind is not CitationKind.CASE:
+            return None
+        tokens = self.normalized.split()
+        if self.reporter in SUPREME_COURT_REPORTERS or "SC" in tokens:
+            return "Supreme Court"
+        if self.reporter in BOMBAY_REPORTERS or "Bom" in tokens:
+            return "Bombay High Court"
+        return None
 
 
 # (2019) 5 SCC 266  |  (1998) 2 Bom CR 461  |  [2024] 10 S.C.R. 108
