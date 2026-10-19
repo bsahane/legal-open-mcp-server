@@ -91,3 +91,7 @@ data/cache/
 .bob/
 _bmad/
 reference-notices/
+
+# Written at runtime by scripts/daily_sync.py and scripts/healthcheck.py
+data/daily_sync_report.json
+data/.healthcheck_state.json
