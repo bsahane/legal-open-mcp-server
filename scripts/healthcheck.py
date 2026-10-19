@@ -4,7 +4,7 @@
 Checks that the server answers ``/health``, that the data disk has room, and
 that last night's ``daily_sync.py`` ran and every step succeeded. Problems
 are printed, logged to syslog at error priority, and - when
-``LEGAL_MCP_ALERT_URL`` is set - POSTed there as plain text (an ntfy.sh topic
+``LEGAL_MCP_ALERT_URL`` is set in ``.env`` - POSTed there as plain text (an ntfy.sh topic
 URL works as-is). The same set of problems is announced at most once a day,
 so an hourly cron does not page every hour.
 
@@ -16,7 +16,6 @@ Run from the project root, e.g. from cron::
 from __future__ import annotations
 
 import json
-import os
 import shutil
 import subprocess
 import sys
@@ -88,13 +87,12 @@ def should_notify(problems: List[str], state: Path, now: float) -> bool:
     return True
 
 
-def notify(problems: List[str]) -> None:
+def notify(problems: List[str], url: Optional[str]) -> None:
     """Log to syslog and, if configured, POST to the alert URL."""
     text = "legal-mcp: " + "; ".join(problems)
     subprocess.run(  # nosec B603 B607 - fixed argv, no shell
         ["logger", "-p", "user.err", "-t", "legal-mcp-health", text], check=False
     )
-    url = os.environ.get("LEGAL_MCP_ALERT_URL")
     if url:
         req = urllib.request.Request(url, data=text.encode(), method="POST")
         try:
@@ -122,7 +120,7 @@ def main() -> int:
         return 0
     print("\n".join(problems))
     if should_notify(problems, data / ".healthcheck_state.json", time.time()):
-        notify(problems)
+        notify(problems, settings.LEGAL_MCP_ALERT_URL)
     return 1
 
 

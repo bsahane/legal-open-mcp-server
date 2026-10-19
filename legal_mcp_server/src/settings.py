@@ -356,6 +356,17 @@ class Settings(BaseSettings):
             "example": "./data/case_law",
         },
     )
+    LEGAL_MCP_ALERT_URL: Optional[str] = Field(
+        default=None,
+        json_schema_extra={
+            "env": "LEGAL_MCP_ALERT_URL",
+            "description": (
+                "Where scripts/healthcheck.py POSTs alerts as plain text, e.g. "
+                "an ntfy.sh topic URL. Unset: alerts only go to syslog."
+            ),
+            "example": "https://ntfy.sh/your-private-topic",
+        },
+    )
     FTS_BUILD_TEMP_DIR: Optional[str] = Field(
         default=None,
         json_schema_extra={

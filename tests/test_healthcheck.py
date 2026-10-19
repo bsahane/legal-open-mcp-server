@@ -6,11 +6,20 @@ from datetime import date
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-_spec = importlib.util.spec_from_file_location(
-    "healthcheck_under_test", ROOT / "scripts" / "healthcheck.py"
-)
-hc = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(hc)
+
+
+def _load_healthcheck():
+    """Import scripts/healthcheck.py as a module without package machinery."""
+    spec = importlib.util.spec_from_file_location(
+        "healthcheck_under_test", ROOT / "scripts" / "healthcheck.py"
+    )
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+hc = _load_healthcheck()
 
 
 def _report(tmp_path: Path, **steps) -> Path:
@@ -50,3 +59,23 @@ def test_same_problems_notify_once_a_day(tmp_path):
 
 def test_unreachable_server_is_flagged():
     assert "failed" in hc.check_health("http://127.0.0.1:9/health")
+
+
+def test_notify_posts_to_alert_url(monkeypatch):
+    sent = {}
+
+    class _Resp:
+        def close(self):
+            pass
+
+    def fake_urlopen(req, timeout):
+        sent["url"], sent["body"] = req.full_url, req.data.decode()
+        return _Resp()
+
+    monkeypatch.setattr(hc.subprocess, "run", lambda *a, **k: None)
+    monkeypatch.setattr(hc.urllib.request, "urlopen", fake_urlopen)
+    hc.notify(["disk 95% full"], "https://ntfy.example/topic")
+    assert sent == {
+        "url": "https://ntfy.example/topic",
+        "body": "legal-mcp: disk 95% full",
+    }
