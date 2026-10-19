@@ -1311,21 +1311,26 @@ class OpenJudgmentsClient:
             conditions.append("try_cast(decision_date AS DATE) <= try_cast(? AS DATE)")
             params.append(to_date)
 
-        fts_where = "fts_main_corpus.match_bm25(c.id, ?) IS NOT NULL"
-        if conditions:
-            where = f"WHERE {fts_where} AND {' AND '.join(conditions)}"
-        else:
-            where = f"WHERE {fts_where}"
+        # Score once, over ids only, then filter the matches: scoring inside
+        # WHERE and again in SELECT ran match_bm25 twice per row across the
+        # whole corpus and evaluated the LIKE filters on every row.
+        where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
         full_sql = f"""
-            SELECT c.*, fts_main_corpus.match_bm25(c.id, ?) AS _score
-            FROM corpus c
+            WITH scored AS (
+                SELECT id, _score FROM (
+                    SELECT id, fts_main_corpus.match_bm25(id, ?) AS _score
+                    FROM corpus
+                ) WHERE _score IS NOT NULL
+            )
+            SELECT c.*, s._score
+            FROM scored s JOIN corpus c ON c.id = s.id
             {where}
-            ORDER BY _score DESC NULLS LAST,
+            ORDER BY s._score DESC NULLS LAST,
                      try_cast(c.decision_date AS DATE) DESC NULLS LAST
             LIMIT ?
             OFFSET ?
         """
-        params = [fts_query, fts_query, *params, limit, offset]
+        params = [fts_query, *params, limit, offset]
 
         def _run() -> List[Dict[str, Any]]:
             con = self._connect_fts()
