@@ -257,6 +257,13 @@ def _sql_quote(value: str) -> str:
     return value.replace("'", "''")
 
 
+# Words so common in case titles ("X v. State of Y") that their FTS5 doclists
+# cover most of the corpus; they are checked with LIKE on narrowed candidates.
+_FTS_STOPWORDS = frozenset(
+    {"and", "for", "the", "with", "from", "versus", "state", "ors", "anr"}
+)
+
+
 class OpenJudgmentsClient:
     """Query free Indian case law held in public S3 Parquet + PDF files."""
 
@@ -1268,29 +1275,34 @@ class OpenJudgmentsClient:
     ) -> Optional[List[SearchResult]]:
         """BM25-ranked search over the built FTS5 index.
 
-        Each plain alphanumeric term is an FTS5 prefix match restricted to title
-        and description, which is a subset of the LIKE path's ``%term%`` test,
-        so no per-row re-filter is needed. Terms with punctuation tokenize
-        differently from a substring test, so those alone are re-checked with
-        LIKE. Returns ``None`` when nothing in the query is indexable; the
-        caller then falls back to the LIKE scan.
+        Each plain word of three or more characters is an FTS5 prefix match
+        restricted to title and description, a subset of the LIKE path's
+        ``%term%`` test, so it needs no per-row re-check. Other terms are
+        re-checked with LIKE on the narrowed candidates. Returns ``None`` when
+        nothing in the query is indexable; the caller then falls back to the
+        LIKE scan.
         """
         conditions: List[str] = []
         params: List[Any] = []
         phrases: List[str] = []
 
         for term in [t for t in re.split(r"\s+", query.strip()) if t]:
-            if not re.fullmatch(r"\w+", term):
-                conditions.append(
-                    "(lower(c.title) LIKE ? OR lower(c.description) LIKE ?)"
-                )
-                like = f"%{term.lower()}%"
-                params.extend([like, like])
-            if re.search(r"\w", term):
-                quoted = '"' + term.replace('"', '""') + '"'
-                # Very short prefixes expand to huge token sets ("of"* hits
-                # office, officer, ...); match those as whole tokens.
-                phrases.append(quoted + ("*" if len(term) >= 3 else ""))
+            lowered = term.lower()
+            words = re.findall(r"\w+", lowered)
+            longest = max(words, key=len, default="")
+            plain = len(words) == 1 and words[0] == lowered
+            if plain and len(lowered) >= 3 and lowered not in _FTS_STOPWORDS:
+                phrases.append(f'"{lowered}"*')
+                continue
+            # Stopwords, very short terms and punctuated terms have doclists
+            # spanning millions of rows ("of" alone matches most titles), or
+            # tokenize differently from a substring test. Check them with the
+            # LIKE path's exact test, on candidates the other terms narrowed.
+            conditions.append("(lower(c.title) LIKE ? OR lower(c.description) LIKE ?)")
+            like = f"%{lowered}%"
+            params.extend([like, like])
+            if not plain and len(longest) >= 3:
+                phrases.append(f'"{longest}"*')
         if not phrases:
             return None
 
@@ -1308,18 +1320,30 @@ class OpenJudgmentsClient:
             conditions.append("date(c.decision_date) <= date(?)")
             params.append(to_date)
 
-        extra = "".join(f" AND {cond}" for cond in conditions)
-        full_sql = f"""
-            SELECT c.*
-            FROM corpus_fts JOIN corpus c ON c.id = corpus_fts.rowid
-            WHERE corpus_fts MATCH ?{extra}
-            ORDER BY bm25(corpus_fts, 1.0, 1.0, 0.0),
-                     date(c.decision_date) DESC NULLS LAST,
-                     c.id
-            LIMIT ?
-            OFFSET ?
-        """
-        params = [match, *params, limit, offset]
+        # Rank inside the FTS index and fetch corpus rows only for the page:
+        # sorting on a corpus column (the old date tie-break) made SQLite read
+        # the full row of every match, 91s for a one-word query. Row-level
+        # filters still need the rows, so then the page is cut after them.
+        # ponytail: bm25 still scores every match (~38s for "state", 10.7M
+        # hits); cap or pre-filter broad queries if those become common.
+        hits = (
+            "SELECT rowid AS id, bm25(corpus_fts, 1.0, 1.0, 0.0) AS score "
+            "FROM corpus_fts WHERE corpus_fts MATCH ?"
+        )
+        order = "ORDER BY hits.score, hits.id DESC"
+        if conditions:
+            full_sql = (
+                f"WITH hits AS ({hits}) SELECT c.* FROM hits "
+                f"JOIN corpus c ON c.id = hits.id "
+                f"WHERE {' AND '.join(conditions)} {order} LIMIT ? OFFSET ?"
+            )
+            params = [match, *params, limit, offset]
+        else:
+            full_sql = (
+                f"WITH hits AS ({hits} ORDER BY score, id DESC LIMIT ? OFFSET ?) "
+                f"SELECT c.* FROM hits JOIN corpus c ON c.id = hits.id {order}"
+            )
+            params = [match, limit, offset]
 
         def _run() -> List[Dict[str, Any]]:
             con = self._connect_fts()

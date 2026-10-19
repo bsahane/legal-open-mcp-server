@@ -661,9 +661,10 @@ class TestFullTextIndex:
     @pytest.mark.asyncio
     async def test_fts_court_filter_matches_like(self, corpus):
         """Court narrowing happens inside FTS5 and agrees with the LIKE path."""
-        like = await corpus.search("State", court="Supreme Court")
+        like = await corpus.search("Bihar", court="Supreme Court")
         self._build(corpus)
-        fts = await corpus.search("State", court="Supreme Court")
+        with patch.object(corpus, "_connect", side_effect=AssertionError("LIKE")):
+            fts = await corpus.search("Bihar", court="Supreme Court")
         assert {h.doc_id for h in fts} == {h.doc_id for h in like}
         assert fts and all(h.court == "Supreme Court of India" for h in fts)
 
@@ -673,6 +674,16 @@ class TestFullTextIndex:
         like = await corpus.search("Bih")
         self._build(corpus)
         fts = await corpus.search("Bih")
+        assert like
+        assert {h.doc_id for h in fts} == {h.doc_id for h in like}
+
+    @pytest.mark.asyncio
+    async def test_stopwords_are_checked_exactly_on_fts_candidates(self, corpus):
+        """ "State Bihar" ranks on Bihar in FTS5 and checks "state" with LIKE."""
+        like = await corpus.search("State of Bihar")
+        self._build(corpus)
+        with patch.object(corpus, "_connect", side_effect=AssertionError("LIKE")):
+            fts = await corpus.search("State of Bihar")
         assert like
         assert {h.doc_id for h in fts} == {h.doc_id for h in like}
 
