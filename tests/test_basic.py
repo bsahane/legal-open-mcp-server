@@ -314,3 +314,39 @@ class TestConfiguration:
             # Assert
             assert settings.MCP_SSL_KEYFILE == "/path/to/key.pem"
             assert settings.MCP_SSL_CERTFILE == "/path/to/cert.pem"
+
+
+def test_every_tool_parameter_has_a_schema_description():
+    """Parameter docs live only in the input schema; a bare one ships undocumented."""
+    import inspect
+    import typing
+
+    from legal_mcp_server.src.tools import (
+        court_tools,
+        deadline_tools,
+        document_tools,
+        drafting_tools,
+        matter_tools,
+        research_tools,
+        statute_tools,
+    )
+
+    bare = []
+    for mod in (
+        court_tools,
+        deadline_tools,
+        document_tools,
+        drafting_tools,
+        matter_tools,
+        research_tools,
+        statute_tools,
+    ):
+        for fn in mod.TOOLS:
+            hints = typing.get_type_hints(fn, include_extras=True)
+            for name in inspect.signature(fn).parameters:
+                hint = hints.get(name)
+                if "Context" in str(hint):
+                    continue
+                if typing.get_origin(hint) is not typing.Annotated:
+                    bare.append(f"{fn.__name__}.{name}")
+    assert bare == []

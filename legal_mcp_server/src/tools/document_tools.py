@@ -483,7 +483,10 @@ async def search_my_documents(
 
 
 async def list_my_documents(
-    matter_id: Optional[int] = None, limit: int = 50
+    matter_id: Annotated[
+        Optional[int], Field(description="id from create_matter or list_matters")
+    ] = None,
+    limit: Annotated[int, Field(description="maximum rows returned")] = 50,
 ) -> Dict[str, Any]:
     """List ingested documents.
 
@@ -558,7 +561,9 @@ async def list_my_documents(
 
 
 async def get_document(
-    document_id: int,
+    document_id: Annotated[
+        int, Field(description="id from ingest_document or list_my_documents")
+    ],
     max_chars: Annotated[
         int, Field(description="truncation limit; 0 for the whole document")
     ] = 20000,

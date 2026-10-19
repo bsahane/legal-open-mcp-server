@@ -81,7 +81,9 @@ def _row_to_matter(row: Any) -> Dict[str, Any]:
 
 
 async def create_matter(
-    title: str,
+    title: Annotated[
+        str, Field(description='short matter name, e.g. "Sharma v. Patel recovery"')
+    ],
     matter_type: Annotated[
         str,
         Field(
@@ -92,17 +94,25 @@ async def create_matter(
         Optional[List[Dict[str, str]]],
         Field(description='[{"name": "...", "role": "plaintiff"}]'),
     ] = None,
-    court: Optional[str] = None,
-    case_number: Optional[str] = None,
-    cnr: Optional[str] = None,
+    court: Annotated[
+        Optional[str], Field(description='forum name, e.g. "Bombay High Court"')
+    ] = None,
+    case_number: Annotated[
+        Optional[str], Field(description='court-assigned number, e.g. "CS 123/2024"')
+    ] = None,
+    cnr: Annotated[Optional[str], Field(description="16-character eCourts CNR")] = None,
     cause_of_action_date: Annotated[
         Optional[str], Field(description="YYYY-MM-DD")
     ] = None,
     filing_date: Annotated[Optional[str], Field(description="YYYY-MM-DD")] = None,
     limitation_expiry: Annotated[Optional[str], Field(description="YYYY-MM-DD")] = None,
-    claim_value: Optional[float] = None,
-    reference: Optional[str] = None,
-    notes: Optional[str] = None,
+    claim_value: Annotated[
+        Optional[float], Field(description="amount in rupees")
+    ] = None,
+    reference: Annotated[
+        Optional[str], Field(description="your own file or client reference")
+    ] = None,
+    notes: Annotated[Optional[str], Field(description="free-text notes")] = None,
 ) -> Dict[str, Any]:
     """Create a matter record to track a dispute, case or transaction.
 
@@ -197,28 +207,51 @@ async def create_matter(
 
 
 async def update_matter(
-    matter_id: int,
-    title: Optional[str] = None,
-    matter_type: Optional[str] = None,
+    matter_id: Annotated[
+        int, Field(description="id from create_matter or list_matters")
+    ],
+    title: Annotated[
+        Optional[str],
+        Field(description='short matter name, e.g. "Sharma v. Patel recovery"'),
+    ] = None,
+    matter_type: Annotated[
+        Optional[str],
+        Field(description="matter category, e.g. cheque_bounce, civil_suit"),
+    ] = None,
     status: Annotated[
         Optional[str],
         Field(
             description="open, pending_filing, in_court, reserved, disposed, closed, on_hold"
         ),
     ] = None,
-    court: Optional[str] = None,
-    case_number: Optional[str] = None,
-    cnr: Optional[str] = None,
-    reference: Optional[str] = None,
-    notes: Optional[str] = None,
-    opposing_counsel: Optional[str] = None,
+    court: Annotated[
+        Optional[str], Field(description='forum name, e.g. "Bombay High Court"')
+    ] = None,
+    case_number: Annotated[
+        Optional[str], Field(description='court-assigned number, e.g. "CS 123/2024"')
+    ] = None,
+    cnr: Annotated[Optional[str], Field(description="16-character eCourts CNR")] = None,
+    reference: Annotated[
+        Optional[str], Field(description="your own file or client reference")
+    ] = None,
+    notes: Annotated[Optional[str], Field(description="free-text notes")] = None,
+    opposing_counsel: Annotated[
+        Optional[str], Field(description="name of the other side's advocate")
+    ] = None,
     cause_of_action_date: Annotated[
         Optional[str], Field(description="YYYY-MM-DD")
     ] = None,
     filing_date: Annotated[Optional[str], Field(description="YYYY-MM-DD")] = None,
     limitation_expiry: Annotated[Optional[str], Field(description="YYYY-MM-DD")] = None,
-    claim_value: Optional[float] = None,
-    parties: Optional[List[Dict[str, str]]] = None,
+    claim_value: Annotated[
+        Optional[float], Field(description="amount in rupees")
+    ] = None,
+    parties: Annotated[
+        Optional[List[Dict[str, str]]],
+        Field(
+            description='replaces the party list: [{"name": ..., "role": "plaintiff"}]'
+        ),
+    ] = None,
 ) -> Dict[str, Any]:
     """Update fields on an existing matter.
 
@@ -332,8 +365,11 @@ async def list_matters(
             description="open, pending_filing, in_court, reserved, disposed, closed, on_hold"
         ),
     ] = None,
-    matter_type: Optional[str] = None,
-    limit: int = 50,
+    matter_type: Annotated[
+        Optional[str],
+        Field(description="matter category, e.g. cheque_bounce, civil_suit"),
+    ] = None,
+    limit: Annotated[int, Field(description="maximum rows returned")] = 50,
 ) -> Dict[str, Any]:
     """List tracked matters, optionally filtered.
 
@@ -431,7 +467,11 @@ async def list_matters(
         }
 
 
-async def get_matter(matter_id: int) -> Dict[str, Any]:
+async def get_matter(
+    matter_id: Annotated[
+        int, Field(description="id from create_matter or list_matters")
+    ],
+) -> Dict[str, Any]:
     """Retrieve one matter with its hearings, events and documents.
 
     TOOL_NAME=get_matter
@@ -543,13 +583,17 @@ async def get_matter(matter_id: int) -> Dict[str, Any]:
 
 
 async def add_hearing(
-    matter_id: int,
+    matter_id: Annotated[
+        int, Field(description="id from create_matter or list_matters")
+    ],
     hearing_date: Annotated[str, Field(description="YYYY-MM-DD")],
     purpose: Annotated[
         Optional[str], Field(description='e.g. "framing of issues"')
     ] = None,
-    bench: Optional[str] = None,
-    outcome: Optional[str] = None,
+    bench: Annotated[Optional[str], Field(description="judge or court room")] = None,
+    outcome: Annotated[
+        Optional[str], Field(description='what happened, e.g. "adjourned"')
+    ] = None,
     next_date: Annotated[Optional[str], Field(description="YYYY-MM-DD")] = None,
 ) -> Dict[str, Any]:
     """Record a hearing on a matter.
@@ -714,14 +758,16 @@ async def list_upcoming_hearings(
 
 
 async def log_matter_event(
-    matter_id: int,
+    matter_id: Annotated[
+        int, Field(description="id from create_matter or list_matters")
+    ],
     event_type: Annotated[
         str,
         Field(
             description='e.g. "notice_sent", "notice_served", "reply_received", "filed", "order_passed", "payment_received", "meeting"'
         ),
     ],
-    description: str,
+    description: Annotated[str, Field(description="what happened, in a sentence")],
     event_date: Annotated[
         Optional[str], Field(description="YYYY-MM-DD, defaults to today")
     ] = None,
@@ -801,7 +847,11 @@ async def log_matter_event(
         }
 
 
-async def get_matter_timeline(matter_id: int) -> Dict[str, Any]:
+async def get_matter_timeline(
+    matter_id: Annotated[
+        int, Field(description="id from create_matter or list_matters")
+    ],
+) -> Dict[str, Any]:
     """Retrieve a matter's full chronology, merging events and hearings.
 
     TOOL_NAME=get_matter_timeline
