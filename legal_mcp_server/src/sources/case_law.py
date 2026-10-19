@@ -15,6 +15,7 @@ for a billed one.
 
 from __future__ import annotations
 
+import asyncio
 import re
 from typing import Any, Dict, List, Optional
 
@@ -147,7 +148,7 @@ async def search(
         hits = await body_index.search(
             open_client, query, court, from_date, to_date, judge, limit, page
         )
-        covered = body_index.covered_courts(open_client)
+        covered = await asyncio.to_thread(body_index.covered_courts, open_client)
         courts = ", ".join(f"{name} ({n:,})" for name, n in covered.items())
         return {
             "backend": backend,

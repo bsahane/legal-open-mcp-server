@@ -4,6 +4,7 @@ Real PDFs with a text layer are generated in memory, so download, extraction,
 indexing and BM25 search are all genuinely exercised; only HTTP is mocked.
 """
 
+import os
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
@@ -201,3 +202,16 @@ class TestTool:
             "Bombay High Court": 1,
             "Supreme Court of India": 2,
         }
+
+
+async def test_covered_courts_is_cached_per_index_version(indexed):
+    client, _, _ = indexed
+    body_index._covered.cache_clear()
+    assert body_index.covered_courts(client)["Supreme Court of India"] == 2
+    body_index.covered_courts(client)
+    assert body_index._covered.cache_info().hits == 1
+    path = body_index.index_path(client)
+    stat = path.stat()
+    os.utime(path, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1))
+    body_index.covered_courts(client)
+    assert body_index._covered.cache_info().misses == 2

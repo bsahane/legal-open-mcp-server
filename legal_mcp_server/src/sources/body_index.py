@@ -23,6 +23,7 @@ See docs/full-text-search.md for the measurements behind this design.
 from __future__ import annotations
 
 import asyncio
+import functools
 import io
 import itertools
 import json
@@ -31,7 +32,7 @@ import sqlite3
 import time
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from legal_mcp_server.src.sources.open_judgments import (
     OpenJudgmentsClient,
@@ -260,20 +261,28 @@ def _match(query: str) -> Optional[str]:
 
 
 def covered_courts(client: OpenJudgmentsClient) -> Dict[str, int]:
-    """Judgments with indexed text, per court label; empty without an index."""
-    path = index_path(client)
-    if not path.is_file():
-        return {}
+    """Judgments with indexed text, per court label; empty without an index.
+
+    Cached per index version: the count is a full scan of ``docs``.
+    """
+    return dict(_covered(str(index_path(client)), version(client)))
+
+
+@functools.lru_cache(maxsize=4)
+def _covered(path: str, stamp: str) -> Tuple[Tuple[str, int], ...]:
+    """Per-court counts for the index at ``path`` as of mtime ``stamp``."""
+    if stamp == "0":
+        return ()
     con = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
     try:
         rows = con.execute(
             "SELECT court_code, count(*) FROM docs WHERE chars > 0 GROUP BY 1"
         ).fetchall()
     except sqlite3.DatabaseError:
-        return {}
+        return ()
     finally:
         con.close()
-    return {court_label(code): int(n) for code, n in rows}
+    return tuple((court_label(code), int(n)) for code, n in rows)
 
 
 async def search(
