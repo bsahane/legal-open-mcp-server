@@ -274,7 +274,7 @@ class TestResearchTools:
         )
         result = await research_tools.verify_all_citations(text)
         assert result["all_verified"] is False
-        assert result["unverified"]
+        assert result["unverified"] == ["(2099) 12 SCC 555"]
         assert "UNVERIFIED" in result["message"]
 
     @pytest.mark.asyncio

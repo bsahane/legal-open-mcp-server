@@ -162,6 +162,12 @@ class TestSyncState:
         assert "Supreme Court of India" in report["courts"]
         assert "free" in report["cost"]
 
+    def test_year_ranges_collapse_runs_and_keep_gaps(self):
+        assert open_judgments.year_ranges([1953, 1950, 1952, 1954, 2026]) == (
+            "1950, 1952-1954, 2026"
+        )
+        assert open_judgments.year_ranges([]) == ""
+
     @pytest.mark.asyncio
     async def test_search_without_sync_raises_corpus_not_synced(self, tmp_path: Path):
         client = open_judgments.OpenJudgmentsClient(data_path=str(tmp_path))

@@ -33,6 +33,15 @@ This project uses [GitHub Releases](https://github.com/redhat-data-and-ai/legal-
   LIKE check still applies). Source files are stored as
   integer ids, shrinking the index by about 3 GB. Needs one full rebuild
   (`make fts`); the next update triggers it automatically.
+- Citation verification's title-search fallback is scoped to the court and
+  year a single-court reporter implies (SCC, SCR, INSC, `AIR … SC`; Bom CR,
+  Mh LJ, ALL MR, `SCC OnLine Bom`), widening to all courts only if nothing
+  is found, so a Supreme Court judgment is no longer crowded out by High
+  Court cases quoting its name.
+- `verify_all_citations` returns `unverified` as a list of citation strings
+  instead of repeating each full entry already in `citations`, and
+  `case_law_status` reports synced years as ranges (`"1950-1972, 1974"`)
+  instead of one list element per year.
 - uvicorn no longer loads websocket support (`ws="none"`); no MCP transport
   uses it, and it pulled in the deprecated `websockets.legacy` module.
 

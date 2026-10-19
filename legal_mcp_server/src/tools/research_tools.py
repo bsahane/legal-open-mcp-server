@@ -897,7 +897,10 @@ async def verify_all_citations(
                 VERDICT_AMBIGUOUS: verification_summary["ambiguous"],
                 VERDICT_UNCHECKED: verification_summary["unchecked"],
             },
-            "unverified": [e for e in checked if e["verdict"] != VERDICT_VERIFIED],
+            # Just the citation text: the full entries are already in "citations".
+            "unverified": [
+                e["citation"] for e in checked if e["verdict"] != VERDICT_VERIFIED
+            ],
             "all_verified": verification_summary["all_verified"],
             "verification_summary": verification_summary,
             "skipped_for_budget": skipped,

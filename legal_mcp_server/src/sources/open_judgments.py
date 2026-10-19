@@ -177,6 +177,21 @@ def court_label(court_code: Optional[str]) -> str:
     return HIGH_COURTS.get(court_code or "", court_code or "Unknown court")
 
 
+def year_ranges(years: List[int]) -> str:
+    """Collapse years into ranges, e.g. ``[1950, 1952, 1953, 1954]`` -> ``"1950, 1952-1954"``.
+
+    Keeps gaps in coverage visible while sending a few tokens instead of one
+    per year to the status tool.
+    """
+    runs: List[List[int]] = []
+    for year in sorted(set(years)):
+        if runs and year == runs[-1][1] + 1:
+            runs[-1][1] = year
+        else:
+            runs.append([year, year])
+    return ", ".join(str(a) if a == b else f"{a}-{b}" for a, b in runs)
+
+
 @dataclass
 class SearchResult:
     """One hit from an open-data case-law search."""
@@ -1986,7 +2001,9 @@ class OpenJudgmentsClient:
         )
         return {
             "synced": bool(synced),
-            "courts": {court_label(code): years for code, years in synced.items()},
+            "courts": {
+                court_label(code): year_ranges(years) for code, years in synced.items()
+            },
             "cached_pdfs": pdfs,
             "data_path": str(self.root),
             "cost": "free - anonymous public S3, no API key, no per-query charge",
