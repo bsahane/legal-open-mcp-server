@@ -50,6 +50,14 @@ This project uses [GitHub Releases](https://github.com/redhat-data-and-ai/legal-
 
 ### Added
 
+- `scripts/healthcheck.py`: hourly check of `/health`, disk usage and the
+  last nightly sync report (now written to
+  `data/daily_sync_report.json`); problems go to syslog and, if
+  `LEGAL_MCP_ALERT_URL` is set, are POSTed there (ntfy-compatible), once a
+  day per distinct problem.
+- `deployment/lxc/deploy.sh`: fast-forward a git checkout, re-sync the
+  virtualenv only when dependencies changed, restart, and wait for health.
+
 - Pagination on the free open-data case-law backend: `search_case_law` now
   accepts `page` on every backend, so deep result sets are reachable without
   the paid Indian Kanoon API.

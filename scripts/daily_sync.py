@@ -37,6 +37,9 @@ log = logging.getLogger("daily_sync")
 # cheap even though the range grows over time.
 FIRST_AVAILABLE_YEAR = 1950
 
+# Written under LEGAL_DATA_PATH after every run; read by scripts/healthcheck.py.
+REPORT_NAME = "daily_sync_report.json"
+
 
 def _case_law() -> dict:
     from legal_mcp_server.src.settings import settings
@@ -214,7 +217,16 @@ def main() -> int:
         "fts_index": _fts_rebuild(),
         "statutes": _statutes(),
     }
-    print(json.dumps(report, indent=2, default=str))
+    text = json.dumps(report, indent=2, default=str)
+    print(text)
+    # A fixed location for scripts/healthcheck.py, which alerts on any failed
+    # step: the exit code below only covers the case-law sync.
+    try:
+        from legal_mcp_server.src.settings import settings
+
+        (Path(settings.LEGAL_DATA_PATH) / REPORT_NAME).write_text(text)
+    except OSError:
+        log.exception("Could not write the sync report for the healthcheck")
     return 0 if report["case_law"].get("status") != "error" else 1
 
 
