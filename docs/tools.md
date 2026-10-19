@@ -44,6 +44,13 @@ Filters: `court`, `from_date`, `to_date`, `judge`, `limit`. Searches case
 full text of every judgment. The response carries a `scope_note` saying so, so
 an empty result is never mistaken for "no such authority exists".
 
+`full_text=True` searches judgment text instead, for topical queries
+(`'"anticipatory bail" parity'`), where the server enables
+`CASE_LAW_FULL_TEXT_SEARCH` and has built the index with `make fts-body`
+(Supreme Court and Bombay High Court by default). Its `scope_note` lists the
+courts and judgment counts actually covered. See
+[full-text-search.md](full-text-search.md).
+
 ### `get_judgment`
 Full judgment text, extracted from the official PDF. `max_chars` truncates and
 discloses the truncation. Scanned judgments with no extractable text say that

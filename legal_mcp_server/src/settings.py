@@ -356,6 +356,17 @@ class Settings(BaseSettings):
             "example": "./data/case_law",
         },
     )
+    CASE_LAW_FULL_TEXT_SEARCH: bool = Field(
+        default=False,
+        json_schema_extra={
+            "env": "CASE_LAW_FULL_TEXT_SEARCH",
+            "description": (
+                "Let search_case_law search judgment text (full_text=True) "
+                "using the index built by scripts/build_body_index.py."
+            ),
+            "example": True,
+        },
+    )
     LEGAL_MCP_ALERT_URL: Optional[str] = Field(
         default=None,
         json_schema_extra={
