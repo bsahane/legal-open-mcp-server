@@ -24,7 +24,9 @@ Create `legal_mcp_server/src/tools/greet_tool.py`:
 Returns a personalised greeting for the given name.
 """
 
-from typing import Any, Dict
+from typing import Annotated, Any, Dict
+
+from pydantic import Field
 
 from legal_mcp_server.utils.pylogger import get_python_logger
 
@@ -32,7 +34,7 @@ logger = get_python_logger()
 
 
 def greet_user(
-    name: str,
+    name: Annotated[str, Field(description="Non-empty name, e.g. Alice")],
 ) -> Dict[str, Any]:
     """Greet a user by name.
 
@@ -40,7 +42,6 @@ def greet_user(
     DISPLAY_NAME=User Greeting
     USECASE=Generate a personalised greeting for a given user name
     INSTRUCTIONS=1. Provide a name string, 2. Call function, 3. Receive greeting
-    INPUT_DESCRIPTION=One parameter: name (non-empty string). Examples: "Alice", "Bob"
     OUTPUT_DESCRIPTION=Dictionary with status, operation, name, greeting, and message
     EXAMPLES=greet_user("Alice"), greet_user("Bob")
     PREREQUISITES=None - standalone operation

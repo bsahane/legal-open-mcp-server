@@ -8,7 +8,9 @@ never as "does not exist".
 """
 
 from datetime import date, datetime
-from typing import Any, Dict, List, Optional
+from typing import Annotated, Any, Dict, List, Optional
+
+from pydantic import Field
 
 from legal_mcp_server.src.domain import new_criminal_codes as ncc
 from legal_mcp_server.src.sources import india_code
@@ -31,14 +33,26 @@ def _corpus_missing() -> Dict[str, Any]:
     }
 
 
-def get_section(statute: str, section: str) -> Dict[str, Any]:
+def get_section(
+    statute: Annotated[
+        str,
+        Field(
+            description='Act name or abbreviation such as "NI Act", "Indian Contract Act, 1872", "IPC", "BNS", "Constitution"'
+        ),
+    ],
+    section: Annotated[
+        str,
+        Field(
+            description='section number, with or without sub-section, e.g. "138", "4(2)", "Article 21"'
+        ),
+    ],
+) -> Dict[str, Any]:
     """Retrieve the text of a specific section of an Indian Act.
 
     TOOL_NAME=get_section
     DISPLAY_NAME=Bare Act Section Lookup
     USECASE=Read the actual provision before advising on it, instead of relying on a remembered paraphrase
     INSTRUCTIONS=1. Give the Act by name or common abbreviation, 2. Give the section number, 3. Check the text_kind field - 'authentic' is the statute's own words, 'summary' is a curated paraphrase that must not be quoted as statutory text
-    INPUT_DESCRIPTION=statute (string, required): Act name or abbreviation such as "NI Act", "Indian Contract Act, 1872", "IPC", "BNS", "Constitution". section (string, required): section number, with or without sub-section, e.g. "138", "4(2)", "Article 21".
     OUTPUT_DESCRIPTION=Dictionary with status, act, section, heading, text, text_kind, chapter, India Code url, and a caveat when the text is a summary
     EXAMPLES=get_section("NI Act", "138"), get_section("Indian Contract Act, 1872", "27"), get_section("Constitution", "21")
     PREREQUISITES=Bundled corpus installed via scripts/fetch_corpus.py; no API key or network needed
@@ -130,7 +144,14 @@ def get_section(statute: str, section: str) -> Dict[str, Any]:
 
 
 def search_statute(
-    query: str, statute: Optional[str] = None, limit: int = 10
+    query: Annotated[
+        str,
+        Field(
+            description='subject words, e.g. "dishonour of cheque" or "restraint of trade"'
+        ),
+    ],
+    statute: Annotated[Optional[str], Field(description="restrict to one Act")] = None,
+    limit: Annotated[int, Field(description="maximum results")] = 10,
 ) -> Dict[str, Any]:
     """Search the bundled Acts for provisions dealing with a subject.
 
@@ -138,7 +159,6 @@ def search_statute(
     DISPLAY_NAME=Statutory Provision Search
     USECASE=Find which section governs a situation when you know the subject but not the section number
     INSTRUCTIONS=1. Describe the subject in a few words, 2. Optionally restrict to one Act, 3. Read the promising results in full with get_section
-    INPUT_DESCRIPTION=query (string, required): subject words, e.g. "dishonour of cheque" or "restraint of trade". statute (string, optional): restrict to one Act. limit (int, optional, default 10): maximum results.
     OUTPUT_DESCRIPTION=Dictionary with status, matching sections (act, section, heading, snippet, text_kind, url), result count, and the coverage caveat
     EXAMPLES=search_statute("dishonour of cheque"), search_statute("anticipatory bail", statute="BNSS"), search_statute("restraint of trade", statute="Indian Contract Act, 1872")
     PREREQUISITES=Bundled corpus installed; no API key or network needed
@@ -210,10 +230,20 @@ def search_statute(
 
 
 def map_criminal_code_section(
-    section: str,
-    direction: str = "auto",
-    domain: Optional[str] = None,
-    offence_date: Optional[str] = None,
+    section: Annotated[str, Field(description='e.g. "420", "138", "482"')],
+    direction: Annotated[
+        str, Field(description='"old_to_new", "new_to_old" or "auto" (default)')
+    ] = "auto",
+    domain: Annotated[
+        Optional[str],
+        Field(
+            description='"penal", "procedure" or "evidence" to disambiguate a number used in more than one code'
+        ),
+    ] = None,
+    offence_date: Annotated[
+        Optional[str],
+        Field(description="YYYY-MM-DD, to determine the governing regime"),
+    ] = None,
 ) -> Dict[str, Any]:
     """Translate between the IPC/CrPC/Evidence Act and the BNS/BNSS/BSA.
 
@@ -221,7 +251,6 @@ def map_criminal_code_section(
     DISPLAY_NAME=Old-New Criminal Code Concordance
     USECASE=Find the corresponding provision after the 1 July 2024 replacement of the IPC, CrPC and Evidence Act, and determine which code actually governs an offence
     INSTRUCTIONS=1. Give the section number, 2. Give the offence date whenever you have one - it decides which code applies, 3. Report BOTH the old and new provision when advising, 4. Read any note on the mapping: several are substantive changes, not renumberings
-    INPUT_DESCRIPTION=section (string, required): e.g. "420", "138", "482". direction (string, optional): "old_to_new", "new_to_old" or "auto" (default). domain (string, optional): "penal", "procedure" or "evidence" to disambiguate a number used in more than one code. offence_date (string, optional): YYYY-MM-DD, to determine the governing regime.
     OUTPUT_DESCRIPTION=Dictionary with status, matching mappings (old and new code and section, subject, note), the applicable regime when an offence date is given, and a coverage caveat
     EXAMPLES=map_criminal_code_section("420", offence_date="2024-03-15"), map_criminal_code_section("318", direction="new_to_old"), map_criminal_code_section("482", domain="procedure")
     PREREQUISITES=None - fully offline
@@ -328,14 +357,17 @@ def map_criminal_code_section(
         }
 
 
-def which_criminal_code_applies(offence_date: str) -> Dict[str, Any]:
+def which_criminal_code_applies(
+    offence_date: Annotated[
+        str, Field(description="date of the offence in YYYY-MM-DD form")
+    ],
+) -> Dict[str, Any]:
     """State which criminal codes govern an offence committed on a given date.
 
     TOOL_NAME=which_criminal_code_applies
     DISPLAY_NAME=Governing Criminal Code
     USECASE=Settle whether the IPC/CrPC/Evidence Act or the BNS/BNSS/BSA applies before drafting a charge, complaint, bail application or opinion
     INSTRUCTIONS=1. Establish the date the offence was committed, 2. Call this tool, 3. Use the named codes for every provision cited thereafter
-    INPUT_DESCRIPTION=offence_date (string, required): date of the offence in YYYY-MM-DD form
     OUTPUT_DESCRIPTION=Dictionary with status, the regime (old or new), the governing penal, procedural and evidence statutes, the reasoning, and a caveat about pending proceedings
     EXAMPLES=which_criminal_code_applies("2024-06-30"), which_criminal_code_applies("2024-07-01")
     PREREQUISITES=None - fully offline
@@ -375,14 +407,17 @@ def which_criminal_code_applies(offence_date: str) -> Dict[str, Any]:
         }
 
 
-def list_bundled_acts(include_sections: bool = False) -> Dict[str, Any]:
+def list_bundled_acts(
+    include_sections: Annotated[
+        bool, Field(description="also list every section number and heading per Act")
+    ] = False,
+) -> Dict[str, Any]:
     """List the Acts available offline and how completely each is covered.
 
     TOOL_NAME=list_bundled_acts
     DISPLAY_NAME=Statute Corpus Coverage
     USECASE=Check whether an Act can be consulted offline before asserting what it says, and see which Acts are only partially bundled
     INSTRUCTIONS=1. Call before relying on a statutory lookup for an unfamiliar Act, 2. Treat a 'partial' Act as an extract - a section missing from it may still exist
-    INPUT_DESCRIPTION=include_sections (bool, optional, default False): also list every section number and heading per Act
     OUTPUT_DESCRIPTION=Dictionary with status, the Acts with title, coverage, section count and source, plus totals and the corpus path
     EXAMPLES=list_bundled_acts(), list_bundled_acts(include_sections=True)
     PREREQUISITES=None

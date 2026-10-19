@@ -154,39 +154,35 @@ class TestServer:
             # Assert
             assert settings.MCP_TRANSPORT_PROTOCOL == "streamable-http"
 
-    def test_health_endpoint(self):
-        """Test health endpoint functionality."""
-        # Arrange
-        with patch("legal_mcp_server.src.api.app") as mock_app:
-            mock_app.routes = [Mock(path="/health")]
+    def test_health_endpoint(self, mock_app):
+        """Test that a server app should expose a /health route.
 
-            # Act
-            from legal_mcp_server.src.api import app
-
-            # Assert
-            assert app is not None
-            assert hasattr(app, "routes")
-            # Skip the actual HTTP test since we're mocking the app
-            # The actual HTTP test would require a properly configured app
+        The real HTTP-level health endpoint test lives in test_api.py;
+        this only verifies the structural expectation under the mocked
+        environment.
+        """
+        # Assert
+        assert mock_app is not None
+        assert hasattr(mock_app, "routes")
+        health_paths = [r.path for r in mock_app.routes]
+        assert "/health" in health_paths
 
 
 class TestAPI:
     """Test API functionality."""
 
-    def test_health_endpoint(self):
-        """Test health endpoint functionality."""
-        # Arrange
-        with patch("legal_mcp_server.src.api.app") as mock_app:
-            mock_app.routes = [Mock(path="/health")]
+    def test_health_endpoint(self, mock_app):
+        """Test that a server app should expose a /health route.
 
-            # Act
-            from legal_mcp_server.src.api import app
-
-            # Assert
-            assert app is not None
-            assert hasattr(app, "routes")
-            # Skip the actual HTTP test since we're mocking the app
-            # The actual HTTP test would require a properly configured app
+        The real HTTP-level health endpoint test lives in test_api.py;
+        this only verifies the structural expectation under the mocked
+        environment.
+        """
+        # Assert
+        assert mock_app is not None
+        assert hasattr(mock_app, "routes")
+        health_paths = [r.path for r in mock_app.routes]
+        assert "/health" in health_paths
 
 
 class TestMain:

@@ -7,7 +7,9 @@ user's own PostgreSQL instance and never leaves it.
 
 import json
 from datetime import date, datetime, timedelta
-from typing import Any, Dict, List, Optional, cast
+from typing import Annotated, Any, Dict, List, Optional, cast
+
+from pydantic import Field
 
 from legal_mcp_server.src.storage.legal_store import (
     get_store,
@@ -80,14 +82,24 @@ def _row_to_matter(row: Any) -> Dict[str, Any]:
 
 async def create_matter(
     title: str,
-    matter_type: str,
-    parties: Optional[List[Dict[str, str]]] = None,
+    matter_type: Annotated[
+        str,
+        Field(
+            description="one of civil_suit, criminal_complaint, cheque_bounce, consumer_complaint, arbitration, writ_petition, appeal, matrimonial, property_dispute, employment, contract_dispute, rti, tax, company_insolvency, notice_only, advisory, other"
+        ),
+    ],
+    parties: Annotated[
+        Optional[List[Dict[str, str]]],
+        Field(description='[{"name": "...", "role": "plaintiff"}]'),
+    ] = None,
     court: Optional[str] = None,
     case_number: Optional[str] = None,
     cnr: Optional[str] = None,
-    cause_of_action_date: Optional[str] = None,
-    filing_date: Optional[str] = None,
-    limitation_expiry: Optional[str] = None,
+    cause_of_action_date: Annotated[
+        Optional[str], Field(description="YYYY-MM-DD")
+    ] = None,
+    filing_date: Annotated[Optional[str], Field(description="YYYY-MM-DD")] = None,
+    limitation_expiry: Annotated[Optional[str], Field(description="YYYY-MM-DD")] = None,
     claim_value: Optional[float] = None,
     reference: Optional[str] = None,
     notes: Optional[str] = None,
@@ -98,7 +110,6 @@ async def create_matter(
     DISPLAY_NAME=Create Matter
     USECASE=Open a tracked record for a legal matter so hearings, documents, deadlines and events can be attached to it
     INSTRUCTIONS=1. Give a descriptive title and a matter_type from the supported list, 2. Record the cause-of-action date whenever it is known - limitation depends on it, 3. Compute the limitation expiry with compute_limitation and store it here, 4. Add parties as objects with name and role
-    INPUT_DESCRIPTION=title (string, required). matter_type (string, required): one of civil_suit, criminal_complaint, cheque_bounce, consumer_complaint, arbitration, writ_petition, appeal, matrimonial, property_dispute, employment, contract_dispute, rti, tax, company_insolvency, notice_only, advisory, other. parties (list of objects, optional): [{"name": "...", "role": "plaintiff"}]. court, case_number, cnr, reference, notes (string, optional). cause_of_action_date, filing_date, limitation_expiry (string, optional): YYYY-MM-DD. claim_value (number, optional).
     OUTPUT_DESCRIPTION=Dictionary with status, the created matter including its id, and a prompt to compute limitation if it was not supplied
     EXAMPLES=create_matter("Cheque dishonour - Sharma Traders", "cheque_bounce", parties=[{"name": "Sharma Traders", "role": "accused"}], cause_of_action_date="2026-07-15", claim_value=200000)
     PREREQUISITES=PostgreSQL running and POSTGRES_* configured
@@ -189,16 +200,23 @@ async def update_matter(
     matter_id: int,
     title: Optional[str] = None,
     matter_type: Optional[str] = None,
-    status: Optional[str] = None,
+    status: Annotated[
+        Optional[str],
+        Field(
+            description="open, pending_filing, in_court, reserved, disposed, closed, on_hold"
+        ),
+    ] = None,
     court: Optional[str] = None,
     case_number: Optional[str] = None,
     cnr: Optional[str] = None,
     reference: Optional[str] = None,
     notes: Optional[str] = None,
     opposing_counsel: Optional[str] = None,
-    cause_of_action_date: Optional[str] = None,
-    filing_date: Optional[str] = None,
-    limitation_expiry: Optional[str] = None,
+    cause_of_action_date: Annotated[
+        Optional[str], Field(description="YYYY-MM-DD")
+    ] = None,
+    filing_date: Annotated[Optional[str], Field(description="YYYY-MM-DD")] = None,
+    limitation_expiry: Annotated[Optional[str], Field(description="YYYY-MM-DD")] = None,
     claim_value: Optional[float] = None,
     parties: Optional[List[Dict[str, str]]] = None,
 ) -> Dict[str, Any]:
@@ -208,7 +226,6 @@ async def update_matter(
     DISPLAY_NAME=Update Matter
     USECASE=Record a change to a matter - it has been filed, a case number issued, the status has moved on, the limitation date is now known
     INSTRUCTIONS=1. Give the matter id, 2. Pass only the fields that changed, 3. Log a matter event as well when the change is substantive
-    INPUT_DESCRIPTION=matter_id (int, required). Any of: title, matter_type, status (open, pending_filing, in_court, reserved, disposed, closed, on_hold), court, case_number, cnr, notes, opposing_counsel (string); cause_of_action_date, filing_date, limitation_expiry (YYYY-MM-DD); claim_value (number); parties (list of objects).
     OUTPUT_DESCRIPTION=Dictionary with status, the updated matter, and the list of fields changed
     EXAMPLES=update_matter(3, status="in_court", case_number="CC/1234/2026"), update_matter(3, limitation_expiry="2026-09-08")
     PREREQUISITES=PostgreSQL running; the matter must exist
@@ -309,7 +326,12 @@ async def update_matter(
 
 
 async def list_matters(
-    status: Optional[str] = None,
+    status: Annotated[
+        Optional[str],
+        Field(
+            description="open, pending_filing, in_court, reserved, disposed, closed, on_hold"
+        ),
+    ] = None,
     matter_type: Optional[str] = None,
     limit: int = 50,
 ) -> Dict[str, Any]:
@@ -319,7 +341,6 @@ async def list_matters(
     DISPLAY_NAME=List Matters
     USECASE=See what is on the file, and spot matters whose limitation date is approaching
     INSTRUCTIONS=1. Call with no filters for everything open, 2. Read the limitation_alerts block first - it flags matters running out of time
-    INPUT_DESCRIPTION=status (string, optional): open, pending_filing, in_court, reserved, disposed, closed, on_hold. matter_type (string, optional). limit (int, optional, default 50).
     OUTPUT_DESCRIPTION=Dictionary with status, the matters, counts by status, and limitation_alerts listing matters expiring within 60 days or already expired
     EXAMPLES=list_matters(), list_matters(status="in_court"), list_matters(matter_type="cheque_bounce")
     PREREQUISITES=PostgreSQL running
@@ -417,7 +438,6 @@ async def get_matter(matter_id: int) -> Dict[str, Any]:
     DISPLAY_NAME=Get Matter Detail
     USECASE=Load everything known about a matter before advising on it or drafting in it
     INSTRUCTIONS=1. Call with the matter id, 2. Read the timeline before the notes - the chronology usually answers the question
-    INPUT_DESCRIPTION=matter_id (int, required)
     OUTPUT_DESCRIPTION=Dictionary with status, the matter, its hearings, its event timeline, attached documents, and the limitation position
     EXAMPLES=get_matter(3)
     PREREQUISITES=PostgreSQL running
@@ -524,11 +544,13 @@ async def get_matter(matter_id: int) -> Dict[str, Any]:
 
 async def add_hearing(
     matter_id: int,
-    hearing_date: str,
-    purpose: Optional[str] = None,
+    hearing_date: Annotated[str, Field(description="YYYY-MM-DD")],
+    purpose: Annotated[
+        Optional[str], Field(description='e.g. "framing of issues"')
+    ] = None,
     bench: Optional[str] = None,
     outcome: Optional[str] = None,
-    next_date: Optional[str] = None,
+    next_date: Annotated[Optional[str], Field(description="YYYY-MM-DD")] = None,
 ) -> Dict[str, Any]:
     """Record a hearing on a matter.
 
@@ -536,7 +558,6 @@ async def add_hearing(
     DISPLAY_NAME=Record Hearing
     USECASE=Log a court date, what it was for, what happened, and when the matter next comes up
     INSTRUCTIONS=1. Record the hearing as soon as the date is known, 2. Fill outcome and next_date after it happens, 3. Keep next_date accurate - it drives the diary
-    INPUT_DESCRIPTION=matter_id (int, required). hearing_date (string, required): YYYY-MM-DD. purpose (string, optional): e.g. "framing of issues". bench (string, optional). outcome (string, optional). next_date (string, optional): YYYY-MM-DD.
     OUTPUT_DESCRIPTION=Dictionary with status and the created hearing record
     EXAMPLES=add_hearing(3, "2026-09-12", purpose="Appearance and framing of charge"), add_hearing(3, "2026-09-12", outcome="Adjourned", next_date="2026-10-20")
     PREREQUISITES=PostgreSQL running; the matter must exist
@@ -611,14 +632,15 @@ async def add_hearing(
         }
 
 
-async def list_upcoming_hearings(days: int = 30) -> Dict[str, Any]:
+async def list_upcoming_hearings(
+    days: Annotated[int, Field(description="how far ahead to look")] = 30,
+) -> Dict[str, Any]:
     """List hearings and next dates falling within a window.
 
     TOOL_NAME=list_upcoming_hearings
     DISPLAY_NAME=Hearing Diary
     USECASE=See what is coming up across every matter, so nothing is walked into unprepared
     INSTRUCTIONS=1. Call with the window you care about, 2. Report anything within seven days first
-    INPUT_DESCRIPTION=days (int, optional, default 30): how far ahead to look
     OUTPUT_DESCRIPTION=Dictionary with status, upcoming hearings with matter title and days away, and the count
     EXAMPLES=list_upcoming_hearings(), list_upcoming_hearings(days=7)
     PREREQUISITES=PostgreSQL running
@@ -692,7 +714,17 @@ async def list_upcoming_hearings(days: int = 30) -> Dict[str, Any]:
 
 
 async def log_matter_event(
-    matter_id: int, event_type: str, description: str, event_date: Optional[str] = None
+    matter_id: int,
+    event_type: Annotated[
+        str,
+        Field(
+            description='e.g. "notice_sent", "notice_served", "reply_received", "filed", "order_passed", "payment_received", "meeting"'
+        ),
+    ],
+    description: str,
+    event_date: Annotated[
+        Optional[str], Field(description="YYYY-MM-DD, defaults to today")
+    ] = None,
 ) -> Dict[str, Any]:
     """Append an event to a matter's chronology.
 
@@ -700,7 +732,6 @@ async def log_matter_event(
     DISPLAY_NAME=Log Matter Event
     USECASE=Build the chronology that a brief, a plaint or an opinion will eventually be written from
     INSTRUCTIONS=1. Log events as they happen with their real dates, not the date you recorded them, 2. Describe what happened factually, without characterising it
-    INPUT_DESCRIPTION=matter_id (int, required). event_type (string, required): e.g. "notice_sent", "notice_served", "reply_received", "filed", "order_passed", "payment_received", "meeting". description (string, required). event_date (string, optional): YYYY-MM-DD, defaults to today.
     OUTPUT_DESCRIPTION=Dictionary with status and the created event
     EXAMPLES=log_matter_event(3, "notice_sent", "Statutory notice under s.138 dispatched by RPAD, receipt no. RX123", event_date="2026-07-20")
     PREREQUISITES=PostgreSQL running; the matter must exist
@@ -777,7 +808,6 @@ async def get_matter_timeline(matter_id: int) -> Dict[str, Any]:
     DISPLAY_NAME=Matter Chronology
     USECASE=Produce the dated chronology that every brief, plaint and opinion needs, in one call
     INSTRUCTIONS=1. Call with the matter id, 2. Use the chronology as the factual spine of any document you draft for this matter
-    INPUT_DESCRIPTION=matter_id (int, required)
     OUTPUT_DESCRIPTION=Dictionary with status, a single merged chronology in date order combining events and hearings, and the matter title
     EXAMPLES=get_matter_timeline(3)
     PREREQUISITES=PostgreSQL running

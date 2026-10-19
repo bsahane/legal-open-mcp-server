@@ -49,6 +49,40 @@ class TestRoundTrip:
         assert await cache.get_cached("never stored") is None
 
 
+class TestQueryNormalization:
+    """Cosmetically different phrasings must land on one entry."""
+
+    @pytest.mark.asyncio
+    async def test_case_and_whitespace_reconcile(self, cache_root):
+        """'Section  420 IPC' and 'section 420 ipc' are one cache entry."""
+        await cache.set_cached({"n": 1}, query="Section  420 IPC")
+        assert await cache.get_cached("section 420 ipc") == {"n": 1}
+
+    @pytest.mark.asyncio
+    async def test_abbreviation_spellings_reconcile(self, cache_root):
+        """'ni act' and 'niact' denote the same act, so they share an entry."""
+        await cache.set_cached({"n": 1}, query="section 138 ni act")
+        assert await cache.get_cached("section 138 NIAct") == {"n": 1}
+
+    @pytest.mark.asyncio
+    async def test_distinct_sections_do_not_collide(self, cache_root):
+        """Folding whitespace must never merge two different sections."""
+        await cache.set_cached({"n": 1}, query="s. 420 ipc")
+        assert await cache.get_cached("s. 302 ipc") is None
+        assert await cache.get_cached("s. 420") is None
+
+    @pytest.mark.asyncio
+    async def test_abbreviation_expansion_needs_word_boundaries(self, cache_root):
+        """'ipc' inside a longer word is not treated as the statute."""
+        await cache.set_cached({"n": 1}, query="ipc")
+        assert await cache.get_cached("hipc") is None
+
+    def test_normalize_is_idempotent(self, cache_root):
+        """Normalizing twice is a no-op, so repeated lookups stay stable."""
+        once = cache._normalize_query("Section 420 IPC")
+        assert cache._normalize_query(once) == once
+
+
 class TestFailureModes:
     """Caching must never break a search."""
 

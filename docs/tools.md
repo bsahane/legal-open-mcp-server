@@ -229,9 +229,10 @@ are not tracked here.
 1. Write the function in the right `src/tools/*.py` module. Use `async def` for
    I/O, `def` for computation.
 2. Give it the structured docstring header (`TOOL_NAME=`, `DISPLAY_NAME=`,
-   `USECASE=`, `INSTRUCTIONS=`, `INPUT_DESCRIPTION=`, `OUTPUT_DESCRIPTION=`,
-   `EXAMPLES=`, `PREREQUISITES=`, `RELATED_TOOLS=`). This is what MCP clients
-   use to choose tools — it is not decoration.
+   `USECASE=`, `INSTRUCTIONS=`, `OUTPUT_DESCRIPTION=`, `EXAMPLES=`,
+   `PREREQUISITES=`, `RELATED_TOOLS=`), and describe parameters with
+   `Annotated[T, Field(description=...)]`. This is what MCP clients use to
+   choose tools — it is not decoration.
 3. Return a dict with `status`; wrap the body in try/except.
 4. Put real logic in `domain/` or `sources/`, not in the tool.
 5. Append it to that module's `TOOLS` list.

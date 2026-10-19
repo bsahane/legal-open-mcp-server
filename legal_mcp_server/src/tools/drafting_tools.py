@@ -13,7 +13,7 @@ document is used.
 import asyncio
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Annotated, Any, Dict, List, Optional
 
 import yaml
 from jinja2 import (
@@ -23,6 +23,7 @@ from jinja2 import (
     StrictUndefined,
     TemplateError,
 )
+from pydantic import Field
 
 from legal_mcp_server.src.settings import settings
 from legal_mcp_server.src.templates.languages import (
@@ -125,14 +126,20 @@ def reload_templates() -> None:
             cached.unlink(missing_ok=True)
 
 
-def list_templates(category: Optional[str] = None) -> Dict[str, Any]:
+def list_templates(
+    category: Annotated[
+        Optional[str],
+        Field(
+            description='filter by "notice", "pleading", "application" or "affidavit"'
+        ),
+    ] = None,
+) -> Dict[str, Any]:
     """List the drafting templates available and what each needs.
 
     TOOL_NAME=list_templates
     DISPLAY_NAME=List Drafting Templates
     USECASE=See what documents can be drafted and exactly which facts each one requires, before gathering instructions from the user
     INSTRUCTIONS=1. Call before drafting, 2. Read the required parameters and collect every one from the user - a template will refuse to render with a placeholder, 3. Read the checklist, which states the procedural pre-conditions
-    INPUT_DESCRIPTION=category (string, optional): filter by "notice", "pleading", "application" or "affidavit"
     OUTPUT_DESCRIPTION=Dictionary with status, templates with key, title, description, required and optional parameters, procedural checklist, governing authority and next steps
     EXAMPLES=list_templates(), list_templates(category="notice")
     PREREQUISITES=None
@@ -190,11 +197,31 @@ def list_templates(category: Optional[str] = None) -> Dict[str, Any]:
 
 
 def draft_document(
-    template_key: str,
-    parameters: Dict[str, Any],
-    language: Optional[str] = None,
-    auto_verify: bool = False,
-    branding: Optional[Dict[str, Any]] = None,
+    template_key: Annotated[
+        str, Field(description='key from list_templates, e.g. "notice_ni138"')
+    ],
+    parameters: Annotated[
+        Dict[str, Any],
+        Field(
+            description="the facts, matching the template's required and optional parameters. List parameters such as facts, demands and reliefs take arrays of strings"
+        ),
+    ],
+    language: Annotated[
+        Optional[str],
+        Field(
+            description='one of the codes listed by get_document_languages (e.g. "en", "hi") - the static text of the template is rendered in that language; parameters you pass are used verbatim'
+        ),
+    ] = None,
+    auto_verify: Annotated[
+        bool,
+        Field(description="if True, runs verify_all_citations on the rendered draft"),
+    ] = False,
+    branding: Annotated[
+        Optional[Dict[str, Any]],
+        Field(
+            description="advocate branding for letterhead - advocate_name, enrollment, firm_name, office_address, mobile, email, logo_base64, separator_style, date_format"
+        ),
+    ] = None,
 ) -> Dict[str, Any]:
     """Render a legal document from a template and a set of facts.
 
@@ -202,7 +229,6 @@ def draft_document(
     DISPLAY_NAME=Draft Legal Document
     USECASE=Produce a notice, complaint, application or affidavit in correct Indian form from facts the user has supplied
     INSTRUCTIONS=1. Call list_templates first to learn the required parameters, 2. Collect every required parameter from the user - never invent names, addresses, amounts or dates, 3. Pass language (e.g. "hi") to draft in a translated language where the template supports it, 4. Optionally pass branding (advocate_name, enrollment, firm_name, office_address, mobile, email, logo_base64, separator_style, date_format) for letterhead formatting, 5. Render, 6. Give the user the draft together with its checklist, 7. If auto_verify is True, the draft is automatically swept for citations
-    INPUT_DESCRIPTION=template_key (string, required): key from list_templates, e.g. "notice_ni138". parameters (object, required): the facts, matching the template's required and optional parameters. List parameters such as facts, demands and reliefs take arrays of strings. language (string, optional): one of the codes listed by get_document_languages (e.g. "en", "hi") - the static text of the template is rendered in that language; parameters you pass are used verbatim. auto_verify (bool, optional, default False): if True, runs verify_all_citations on the rendered draft. branding (object, optional): advocate branding for letterhead - advocate_name, enrollment, firm_name, office_address, mobile, email, logo_base64, separator_style, date_format.
     OUTPUT_DESCRIPTION=Dictionary with status, the rendered draft, the template's procedural checklist, governing authority, next steps, verification result (if auto_verify), and a reminder that the draft is unsigned and unserved
     EXAMPLES=draft_document("rti_application", {"public_authority": "Municipal Corporation of Greater Mumbai", "authority_address": "...", "application_date": "2026-08-02", "information_sought": ["Copy of building plan approval for CTS 123"], "applicant_name": "...", "applicant_address": "..."}), draft_document("notice_ni138", {"sender_name": "...", "sender_address": "...", "notice_date": "2026-08-16", "recipient_name": "...", "recipient_address": "...", "client_name": "...", "client_address": "...", "liability_description": "...", "cheque_number": "123456", "cheque_date": "2026-07-01", "cheque_amount": 100000, "amount_in_words": "One Lakh Only", "drawee_bank": "...", "drawee_branch": "...", "payee_bank": "...", "payee_branch": "...", "presentation_date": "2026-07-02", "dishonour_reason": "Insufficient funds", "dishonour_memo_date": "2026-07-03", "dishonour_date": "2026-07-03"}, language="hi", auto_verify=True, branding={"advocate_name": "Bhushan Sahane", "enrollment": "MAH/1234/2020", "firm_name": "Bhushan Sahane & Associates", "office_address": "504, FcyMax-3, Udyog Vihar, Sector-3, Gurgaon, Haryana-122002", "mobile": "8552019001", "separator_style": "equals", "date_format": "DD@MM@YYYY"})
     PREREQUISITES=None - fully offline
@@ -391,14 +417,18 @@ def draft_document(
         }
 
 
-def review_draft(draft_text: str, template_key: Optional[str] = None) -> Dict[str, Any]:
+def review_draft(
+    draft_text: Annotated[str, Field(description="the full draft")],
+    template_key: Annotated[
+        Optional[str], Field(description="the template it was drafted from")
+    ] = None,
+) -> Dict[str, Any]:
     """Check a draft for structural and procedural defects before it is used.
 
     TOOL_NAME=review_draft
     DISPLAY_NAME=Review Draft Document
     USECASE=Catch unfilled placeholders, missing verification, absent limitation pleadings and unmet procedural pre-conditions before a document is signed or filed
     INSTRUCTIONS=1. Pass the draft text, 2. Pass the template_key where the draft came from one, so its specific checklist is applied, 3. Fix every issue reported before the document goes out, 4. Run verify_all_citations separately if the draft cites authority
-    INPUT_DESCRIPTION=draft_text (string, required): the full draft. template_key (string, optional): the template it was drafted from.
     OUTPUT_DESCRIPTION=Dictionary with status, structural issues found with severity, the template's procedural checklist, and a summary
     EXAMPLES=review_draft(draft_text, template_key="consumer_complaint"), review_draft(pasted_notice_text)
     PREREQUISITES=None - fully offline
@@ -560,14 +590,17 @@ def review_draft(draft_text: str, template_key: Optional[str] = None) -> Dict[st
         }
 
 
-def get_document_languages(template_key: str) -> Dict[str, Any]:
+def get_document_languages(
+    template_key: Annotated[
+        str, Field(description='the template key, e.g. "writ_petition"')
+    ],
+) -> Dict[str, Any]:
     """Report the languages a drafting template can render its static text in.
 
     TOOL_NAME=get_document_languages
     DISPLAY_NAME=Get Document Languages
     USECASE=Check which languages a document template supports before drafting, so the user is not asked for a language the template cannot honour
     INSTRUCTIONS=1. Call before drafting when the user asks for a document in a particular language, 2. If the requested language is not supported, either pick a supported one or note that only the static text is translated while user-supplied facts stay verbatim
-    INPUT_DESCRIPTION=template_key (string, required): the template key, e.g. "writ_petition"
     OUTPUT_DESCRIPTION=Dictionary with status, the template, the supported language codes and their English names, and a note on how translation behaves
     EXAMPLES=get_document_languages("writ_petition"), get_document_languages("ni_138_notice")
     PREREQUISITES=None - fully offline
@@ -672,9 +705,12 @@ def _substitute(sentence: str, captured: Dict[str, str]) -> str:
 
 
 def translate_document(
-    draft_text: str,
-    target_language: str,
-    source_language: Optional[str] = None,
+    draft_text: Annotated[str, Field(description="the rendered draft")],
+    target_language: Annotated[str, Field(description="one of en/hi/mr/ta/te")],
+    source_language: Annotated[
+        Optional[str],
+        Field(description="the language the draft is currently in, defaulting to en"),
+    ] = None,
 ) -> Dict[str, Any]:
     """Translate the static prose of a rendered draft into another language.
 
@@ -686,7 +722,6 @@ def translate_document(
     DISPLAY_NAME=Translate Draft Document
     USECASE=Produce a translated version of a draft when the user asks for one, or when the facts are available in English but the document must be filed in a regional language
     INSTRUCTIONS=1. Pass the draft text, 2. Pass the target_language code (en/hi/mr/ta/te), 3. Only the static template prose is translated - names, addresses, amounts, case numbers and citations are preserved verbatim, 4. For a truly filing-ready document, settle the translation with a translator or advocate before use
-    INPUT_DESCRIPTION=draft_text (string, required): the rendered draft. target_language (string, required): one of en/hi/mr/ta/te. source_language (string, optional): the language the draft is currently in, defaulting to en.
     OUTPUT_DESCRIPTION=Dictionary with status, the translated draft, the languages involved, and a disclaimer
     EXAMPLES=translate_document(draft, target_language="hi"), translate_document(draft, target_language="mr", source_language="en")
     PREREQUISITES=None - fully offline, rule-based

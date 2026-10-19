@@ -6,19 +6,21 @@ All MCP server capabilities are implemented as **tools** for maximum compatibili
 
 ### **Required Tool Documentation Format**
 
-**CRITICAL**: All tools MUST use this structured format for agent compatibility:
+**CRITICAL**: All tools MUST use this structured format for agent compatibility.
+Describe each parameter with `Annotated[T, Field(description=...)]` (from
+`typing` and `pydantic`) — FastMCP puts it in the tool's input schema. Skip the
+description when the name and type already say everything (`matter_id: int`).
 
 ```python
 def your_tool_function(
-    input_param: str,
-    optional_param: str = "default"
+    input_param: Annotated[str, Field(description="What it is, with an example")],
+    optional_param: Annotated[str, Field(description="...")] = "default",
 ) -> Dict[str, Any]:
     """
     TOOL_NAME=your_tool_function
     DISPLAY_NAME=Human-Readable Tool Name
     USECASE=When/why to use this tool (specific scenarios)
     INSTRUCTIONS=Step-by-step usage guide for agents
-    INPUT_DESCRIPTION=Expected data format with examples
     OUTPUT_DESCRIPTION=What format you'll receive back
     EXAMPLES=your_tool_function("example_input", "optional_value")
     PREREQUISITES=What to do first (workflow sequence)

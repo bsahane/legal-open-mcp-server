@@ -1,6 +1,8 @@
 """Court status, directory and jurisdiction tools for the Legal MCP Server."""
 
-from typing import Any, Dict, List, Optional
+from typing import Annotated, Any, Dict, List, Optional
+
+from pydantic import Field
 
 from legal_mcp_server.src.settings import settings
 from legal_mcp_server.src.sources import ecourts
@@ -117,9 +119,14 @@ COURT_DIRECTORY: Dict[str, List[Dict[str, str]]] = {
 
 
 async def get_case_status(
-    cnr: Optional[str] = None,
-    case_number: Optional[str] = None,
-    court: Optional[str] = None,
+    cnr: Annotated[Optional[str], Field(description="16-character CNR number")] = None,
+    case_number: Annotated[
+        Optional[str], Field(description="case type, number and year")
+    ] = None,
+    court: Annotated[
+        Optional[str],
+        Field(description="court name, needed when searching by case number"),
+    ] = None,
 ) -> Dict[str, Any]:
     """Look up the status of a pending case.
 
@@ -127,7 +134,6 @@ async def get_case_status(
     DISPLAY_NAME=Case Status Lookup
     USECASE=Find the current stage and next hearing date of a case on the eCourts system
     INSTRUCTIONS=1. Prefer the CNR number, which is unique and fastest, 2. In the default manual mode you receive portal steps to follow yourself - the official portal is CAPTCHA-gated and is not automated here, 3. Record what you find with add_hearing and log_matter_event
-    INPUT_DESCRIPTION=cnr (string, optional): 16-character CNR number. case_number (string, optional): case type, number and year. court (string, optional): court name, needed when searching by case number.
     OUTPUT_DESCRIPTION=In api mode, the case record. In manual mode, the portal URL, the steps to follow, what to capture, and where to record it. Always includes which adapter was used.
     EXAMPLES=get_case_status(cnr="MHMU010123452026"), get_case_status(case_number="CC/1234/2026", court="City Civil Court, Mumbai")
     PREREQUISITES=Manual mode needs nothing. Automated lookup needs ECOURTS_ADAPTER=api and a licensed ECOURTS_API_KEY.
@@ -212,14 +218,20 @@ async def get_case_status(
         }
 
 
-def court_directory(court_type: Optional[str] = None) -> Dict[str, Any]:
+def court_directory(
+    court_type: Annotated[
+        Optional[str],
+        Field(
+            description='"supreme_court", "high_court", "district_court" or "tribunal"'
+        ),
+    ] = None,
+) -> Dict[str, Any]:
     """List courts and tribunals with their seats and jurisdiction.
 
     TOOL_NAME=court_directory
     DISPLAY_NAME=Court Directory
     USECASE=Identify the right forum, its seat and its website before filing or advising on where a matter goes
     INSTRUCTIONS=1. Filter by type if you know it, 2. Read the jurisdiction line - it is what determines the correct forum, not the court's convenience
-    INPUT_DESCRIPTION=court_type (string, optional): "supreme_court", "high_court", "district_court" or "tribunal"
     OUTPUT_DESCRIPTION=Dictionary with status, courts with name, seat, website and jurisdiction, plus a note on coverage
     EXAMPLES=court_directory(), court_directory(court_type="tribunal")
     PREREQUISITES=None - fully offline
@@ -272,10 +284,16 @@ def court_directory(court_type: Optional[str] = None) -> Dict[str, Any]:
 
 
 def determine_jurisdiction(
-    subject_matter: str,
-    claim_value: Optional[float] = None,
-    cause_of_action_place: Optional[str] = None,
-    defendant_place: Optional[str] = None,
+    subject_matter: Annotated[str, Field(description="what the dispute is about")],
+    claim_value: Annotated[
+        Optional[float], Field(description="value in rupees")
+    ] = None,
+    cause_of_action_place: Annotated[
+        Optional[str], Field(description="where the cause of action arose")
+    ] = None,
+    defendant_place: Annotated[
+        Optional[str], Field(description="where the defendant resides or works")
+    ] = None,
 ) -> Dict[str, Any]:
     """Work out which forum a dispute belongs in.
 
@@ -283,7 +301,6 @@ def determine_jurisdiction(
     DISPLAY_NAME=Jurisdiction Analysis
     USECASE=Decide where a matter should be filed, covering subject-matter, pecuniary and territorial jurisdiction
     INSTRUCTIONS=1. Describe the subject matter, 2. Give the claim value and the places connected to the dispute, 3. Confirm the pecuniary limits against the current notification before filing - those limits change and this tool does not track amendments
-    INPUT_DESCRIPTION=subject_matter (string, required): what the dispute is about. claim_value (number, optional): value in rupees. cause_of_action_place (string, optional): where the cause of action arose. defendant_place (string, optional): where the defendant resides or works.
     OUTPUT_DESCRIPTION=Dictionary with status, the suggested forum on subject matter, the territorial options with their statutory basis, notes on pecuniary jurisdiction, and the provisions to check
     EXAMPLES=determine_jurisdiction("dishonoured cheque", claim_value=200000, cause_of_action_place="Mumbai"), determine_jurisdiction("defective product bought online", claim_value=45000)
     PREREQUISITES=None - fully offline

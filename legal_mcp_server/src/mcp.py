@@ -124,11 +124,12 @@ def _court_tools() -> List[Callable[..., Any]]:
 # Structured docstring keys worth their tokens on the wire. TOOL_NAME and
 # DISPLAY_NAME duplicate name/title, OUTPUT_DESCRIPTION and EXAMPLES only
 # matter after the tool is chosen, and the Google Args/Returns tail repeats
-# INPUT_DESCRIPTION. Tool definitions are resent on every model request.
+# the parameter descriptions, which live in the input schema via
+# Annotated[..., Field(description=...)]. Tool definitions are resent on
+# every model request.
 _WIRE_KEYS = (
     "USECASE",
     "INSTRUCTIONS",
-    "INPUT_DESCRIPTION",
     "PREREQUISITES",
     "RELATED_TOOLS",
 )

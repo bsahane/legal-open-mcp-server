@@ -13,7 +13,9 @@ response instead of quietly returning weaker results.
 import hashlib
 import re
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Annotated, Any, Dict, List, Optional
+
+from pydantic import Field
 
 from legal_mcp_server.src.domain import clause_rules
 from legal_mcp_server.src.sources import embeddings as emb
@@ -160,10 +162,17 @@ def chunk_text(text: str) -> List[Dict[str, Any]]:
 
 
 async def ingest_document(
-    file_path: str,
-    title: Optional[str] = None,
-    doc_type: Optional[str] = None,
-    matter_id: Optional[int] = None,
+    file_path: Annotated[str, Field(description="absolute path to the file")],
+    title: Annotated[
+        Optional[str], Field(description="defaults to the filename")
+    ] = None,
+    doc_type: Annotated[
+        Optional[str],
+        Field(description='e.g. "contract", "judgment", "notice", "pleading"'),
+    ] = None,
+    matter_id: Annotated[
+        Optional[int], Field(description="matter to attach it to")
+    ] = None,
 ) -> Dict[str, Any]:
     """Ingest a document into the searchable store.
 
@@ -171,7 +180,6 @@ async def ingest_document(
     DISPLAY_NAME=Ingest Document
     USECASE=Add a contract, notice, judgment, pleading or case bundle to the searchable index so it can be questioned later
     INSTRUCTIONS=1. Give the absolute path to a PDF, DOCX, TXT or MD file, 2. Link it to a matter where one exists, 3. If ingest reports a scanned PDF, OCR it before retrying - it will not be indexed blind
-    INPUT_DESCRIPTION=file_path (string, required): absolute path to the file. title (string, optional): defaults to the filename. doc_type (string, optional): e.g. "contract", "judgment", "notice", "pleading". matter_id (int, optional): matter to attach it to.
     OUTPUT_DESCRIPTION=Dictionary with status, the document id, chunk count, page count, whether embeddings were generated, and a duplicate flag if the file was already ingested
     EXAMPLES=ingest_document("/Users/me/docs/vendor-agreement.pdf", doc_type="contract", matter_id=3)
     PREREQUISITES=PostgreSQL running. Semantic search additionally needs EMBEDDING_PROVIDER set to voyage or local.
@@ -308,10 +316,14 @@ async def ingest_document(
 
 
 async def search_my_documents(
-    query: str,
-    matter_id: Optional[int] = None,
-    doc_type: Optional[str] = None,
-    limit: int = 8,
+    query: Annotated[str, Field(description="what you are looking for")],
+    matter_id: Annotated[
+        Optional[int], Field(description="restrict to one matter")
+    ] = None,
+    doc_type: Annotated[
+        Optional[str], Field(description="restrict by category")
+    ] = None,
+    limit: Annotated[int, Field(description="maximum passages")] = 8,
 ) -> Dict[str, Any]:
     """Search your own ingested documents.
 
@@ -319,7 +331,6 @@ async def search_my_documents(
     DISPLAY_NAME=Search My Documents
     USECASE=Find the passage in your own contracts, notices, judgments or case bundles that answers a question
     INSTRUCTIONS=1. Ask for the substance you need, not just keywords, 2. Filter by matter where you know it, 3. Check search_mode in the response - 'fulltext_only' means conceptual queries were not really answered
-    INPUT_DESCRIPTION=query (string, required): what you are looking for. matter_id (int, optional): restrict to one matter. doc_type (string, optional): restrict by category. limit (int, optional, default 8): maximum passages.
     OUTPUT_DESCRIPTION=Dictionary with status, matching passages with document title, heading and content, the search_mode actually used, and a note when semantic search was unavailable
     EXAMPLES=search_my_documents("termination for convenience notice period"), search_my_documents("indemnity cap", matter_id=3)
     PREREQUISITES=PostgreSQL running with documents ingested. Semantic ranking needs an embedding provider.
@@ -480,7 +491,6 @@ async def list_my_documents(
     DISPLAY_NAME=List My Documents
     USECASE=See what has been ingested before searching, so an empty search result can be told apart from an empty index
     INSTRUCTIONS=1. Call with no filter for everything, or a matter_id to scope it
-    INPUT_DESCRIPTION=matter_id (int, optional). limit (int, optional, default 50).
     OUTPUT_DESCRIPTION=Dictionary with status, documents with id, title, type, page and chunk counts, and the total
     EXAMPLES=list_my_documents(), list_my_documents(matter_id=3)
     PREREQUISITES=PostgreSQL running
@@ -547,14 +557,18 @@ async def list_my_documents(
         }
 
 
-async def get_document(document_id: int, max_chars: int = 20000) -> Dict[str, Any]:
+async def get_document(
+    document_id: int,
+    max_chars: Annotated[
+        int, Field(description="truncation limit; 0 for the whole document")
+    ] = 20000,
+) -> Dict[str, Any]:
     """Retrieve an ingested document's text.
 
     TOOL_NAME=get_document
     DISPLAY_NAME=Get Document
     USECASE=Read a whole ingested document rather than isolated passages
     INSTRUCTIONS=1. Give the document id from list_my_documents or a search result, 2. Raise max_chars if the document is truncated and you need the rest
-    INPUT_DESCRIPTION=document_id (int, required). max_chars (int, optional, default 20000): truncation limit; 0 for the whole document.
     OUTPUT_DESCRIPTION=Dictionary with status, the document metadata, its text, and whether the text was truncated
     EXAMPLES=get_document(5), get_document(5, max_chars=0)
     PREREQUISITES=PostgreSQL running
@@ -624,14 +638,20 @@ async def get_document(document_id: int, max_chars: int = 20000) -> Dict[str, An
         }
 
 
-def extract_clauses(text: str) -> Dict[str, Any]:
+def extract_clauses(
+    text: Annotated[
+        str,
+        Field(
+            description="the contract text. Use get_document to obtain it for an ingested file"
+        ),
+    ],
+) -> Dict[str, Any]:
     """Map a contract's clauses onto a standard taxonomy.
 
     TOOL_NAME=extract_clauses
     DISPLAY_NAME=Extract Contract Clauses
     USECASE=See at a glance what a contract does and does not provide for, before reading it line by line
     INSTRUCTIONS=1. Pass the contract text, 2. Read missing_expected_clauses first - what a contract omits is usually more dangerous than what it says
-    INPUT_DESCRIPTION=text (string, required): the contract text. Use get_document to obtain it for an ingested file.
     OUTPUT_DESCRIPTION=Dictionary with status, clauses found by category with excerpts and positions, the categories a commercial contract normally has but this one lacks, and counts
     EXAMPLES=extract_clauses(contract_text)
     PREREQUISITES=None - fully offline
@@ -697,14 +717,18 @@ def extract_clauses(text: str) -> Dict[str, Any]:
         }
 
 
-def review_contract(text: str, party_side: Optional[str] = None) -> Dict[str, Any]:
+def review_contract(
+    text: Annotated[str, Field(description="the contract text")],
+    party_side: Annotated[
+        Optional[str], Field(description="which side you act for, to frame the summary")
+    ] = None,
+) -> Dict[str, Any]:
     """Flag risky and missing provisions in a contract under Indian law.
 
     TOOL_NAME=review_contract
     DISPLAY_NAME=Contract Risk Review
     USECASE=Get a structured first-pass risk review of a contract, grounded in Indian statutory law rather than generic commercial advice
     INSTRUCTIONS=1. Pass the contract text, 2. Work through the high-severity flags first, 3. Treat each flag as a prompt to read the clause, not as a conclusion, 4. Note that section 27 makes most post-termination non-competes void in India regardless of how reasonable they look
-    INPUT_DESCRIPTION=text (string, required): the contract text. party_side (string, optional): which side you act for, to frame the summary.
     OUTPUT_DESCRIPTION=Dictionary with status, risk flags by severity with the statutory authority for each, the clause map, missing expected clauses, and a summary
     EXAMPLES=review_contract(contract_text), review_contract(contract_text, party_side="the employee")
     PREREQUISITES=None - fully offline

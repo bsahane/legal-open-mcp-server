@@ -12,9 +12,10 @@ and High Court judgments (CC-BY-4.0): no API key, no per-query cost.
 
 import asyncio
 import hashlib
-from typing import Any, Dict, List, Optional
+from typing import Annotated, Any, Dict, List, Optional
 
 from fastmcp import Context
+from pydantic import Field
 
 from legal_mcp_server.src.cache import (
     get_cached,
@@ -69,13 +70,22 @@ def _unavailable(operation: str, error: Exception) -> Dict[str, Any]:
 
 
 async def search_case_law(
-    query: str,
-    court: Optional[str] = None,
-    from_date: Optional[str] = None,
-    to_date: Optional[str] = None,
-    judge: Optional[str] = None,
-    limit: int = 20,
-    page: int = 0,
+    query: Annotated[str, Field(description="search terms; all terms must appear")],
+    court: Annotated[
+        Optional[str],
+        Field(description='"Supreme Court", "Bombay High Court", "Delhi", etc.'),
+    ] = None,
+    from_date: Annotated[
+        Optional[str], Field(description="YYYY-MM-DD lower bound")
+    ] = None,
+    to_date: Annotated[
+        Optional[str], Field(description="YYYY-MM-DD upper bound")
+    ] = None,
+    judge: Annotated[Optional[str], Field(description="judge name fragment")] = None,
+    limit: Annotated[int, Field(description="results per page")] = 20,
+    page: Annotated[
+        int, Field(description="zero-based page into the ranked results")
+    ] = 0,
 ) -> Dict[str, Any]:
     """Search Indian case law in the free open-access judgment corpus.
 
@@ -83,7 +93,6 @@ async def search_case_law(
     DISPLAY_NAME=Indian Case Law Search
     USECASE=Find Indian judgments on a legal proposition, from the Supreme Court or any High Court, at no cost
     INSTRUCTIONS=1. Check the corpus covers what you need with case_law_status, 2. Search by party name, case title terms or judge - this indexes case metadata, not full judgment text, 3. Open promising results with get_judgment to read the actual reasoning, 4. Never cite a result you have not opened
-    INPUT_DESCRIPTION=query (string, required): search terms; all terms must appear. court (string, optional): "Supreme Court", "Bombay High Court", "Delhi", etc. from_date/to_date (string, optional): YYYY-MM-DD bounds. judge (string, optional): judge name fragment. limit (int, optional, default 20): results per page. page (int, optional, default 0): zero-based page into the ranked results.
     OUTPUT_DESCRIPTION=Dictionary with status, results (doc_id, title, court, date, citation, neutral_citation, judge, disposal, url), the backend used, the page returned, and a scope note stating what was actually searched
     EXAMPLES=search_case_law("cheque dishonour", court="Bombay High Court"), search_case_law("Vijay Singh Bihar", court="Supreme Court"), search_case_law("specific performance", page=2)
     PREREQUISITES=Run sync_case_law once for the courts and years you need. No API key and no per-query cost on the default open-data backend.
@@ -173,7 +182,14 @@ async def search_case_law(
 
 
 async def get_judgment(
-    doc_id: str, include_citations: bool = True, max_chars: int = 0
+    doc_id: Annotated[
+        str,
+        Field(
+            description='identifier from search_case_law, e.g. "sc:2024:2024_10_108_125" or "hc:27_1:hcbgoa:2024:HCBM050003922024_1_2024-04-25.pdf"'
+        ),
+    ],
+    include_citations: Annotated[bool, Field(description="reserved")] = True,
+    max_chars: Annotated[int, Field(description="truncate very long judgments")] = 0,
 ) -> Dict[str, Any]:
     """Retrieve the full text of a judgment from the official PDF.
 
@@ -181,7 +197,6 @@ async def get_judgment(
     DISPLAY_NAME=Full Judgment Retrieval
     USECASE=Read a complete judgment before relying on it
     INSTRUCTIONS=1. Obtain a doc_id from search_case_law, 2. Call this tool, 3. Read the holding rather than the headnote, 4. Quote only what the text actually says
-    INPUT_DESCRIPTION=doc_id (string, required): identifier from search_case_law, e.g. "sc:2024:2024_10_108_125" or "hc:27_1:hcbgoa:2024:HCBM050003922024_1_2024-04-25.pdf". include_citations (bool, optional): reserved. max_chars (int, optional, default 0 = whole judgment): truncate very long judgments.
     OUTPUT_DESCRIPTION=Dictionary with status, doc_id, title, court, date, bench, full text, citation, neutral_citation, disposal, cnr, url and attribution
     EXAMPLES=get_judgment("sc:2024:2024_10_108_125"), get_judgment("sc:2024:2024_10_108_125", max_chars=20000)
     PREREQUISITES=The judgment PDF is downloaded once from public S3 and cached locally. Free on the default open-data backend.
@@ -236,14 +251,21 @@ async def get_judgment(
         }
 
 
-async def search_within_judgment(doc_id: str, query: str) -> Dict[str, Any]:
+async def search_within_judgment(
+    doc_id: Annotated[str, Field(description="identifier from search_case_law")],
+    query: Annotated[
+        str,
+        Field(
+            description='the point to locate, e.g. "territorial jurisdiction" or "burden of proof"'
+        ),
+    ],
+) -> Dict[str, Any]:
     """Find the passages inside one judgment that deal with a specific point.
 
     TOOL_NAME=search_within_judgment
     DISPLAY_NAME=Judgment Passage Finder
     USECASE=Locate what a specific judgment says about a specific point without reading the whole thing
     INSTRUCTIONS=1. Obtain a doc_id from search_case_law, 2. Pass the point you need, 3. Read the surrounding passage, not just the matched phrase
-    INPUT_DESCRIPTION=doc_id (string, required): identifier from search_case_law. query (string, required): the point to locate, e.g. "territorial jurisdiction" or "burden of proof"
     OUTPUT_DESCRIPTION=Dictionary with status, doc_id, title, matching passages with character offsets, url and match count
     EXAMPLES=search_within_judgment("sc:2024:2024_10_108_125", "burden of proof"), search_within_judgment("hc:27_1:hcbgoa:2024:HCBM050003922024_1_2024-04-25.pdf", "jurisdiction")
     PREREQUISITES=The judgment PDF is cached after the first fetch, so repeat searches are offline and free
@@ -293,14 +315,16 @@ async def search_within_judgment(doc_id: str, query: str) -> Dict[str, Any]:
         }
 
 
-async def find_related_proceedings(doc_id: str, limit: int = 20) -> Dict[str, Any]:
+async def find_related_proceedings(
+    doc_id: Annotated[str, Field(description="identifier from search_case_law")],
+    limit: Annotated[int, Field(description="maximum results")] = 20,
+) -> Dict[str, Any]:
     """Find other proceedings involving the same parties as a judgment.
 
     TOOL_NAME=find_related_proceedings
     DISPLAY_NAME=Related Proceedings Finder
     USECASE=Surface appeals, reviews and connected matters involving the same parties
     INSTRUCTIONS=1. Obtain a doc_id, 2. Call this tool, 3. Read the is_citator flag - when it is False this is a party-name match and tells you NOTHING about whether the judgment is still good law, 4. Say so plainly when reporting
-    INPUT_DESCRIPTION=doc_id (string, required): identifier from search_case_law. limit (int, optional, default 20): maximum results.
     OUTPUT_DESCRIPTION=Dictionary with status, results, is_citator flag, the party terms matched on, and an explicit note on what the list does and does not establish
     EXAMPLES=find_related_proceedings("sc:2024:2024_10_108_125"), find_related_proceedings("sc:2024:2024_10_108_125", limit=50)
     PREREQUISITES=Free on the open-data backend. The open corpus has no citation graph, so this is NOT a citator.
@@ -595,8 +619,18 @@ def _build_verification_summary(checked: List[Dict[str, Any]]) -> Dict[str, Any]
 
 
 async def verify_citation(
-    citation: str,
-    use_dual_source: bool = True,
+    citation: Annotated[
+        str,
+        Field(
+            description='one citation, e.g. "(2014) 9 SCC 129", "AIR 1973 SC 1461", "2024:BHC-AS:12345", or "Section 138 of the Negotiable Instruments Act, 1881"'
+        ),
+    ],
+    use_dual_source: Annotated[
+        bool,
+        Field(
+            description="if True, falls back to Indian Kanoon when open_data cannot verify"
+        ),
+    ] = True,
 ) -> Dict[str, Any]:
     """Check that a single legal citation refers to something that actually exists.
 
@@ -604,7 +638,6 @@ async def verify_citation(
     DISPLAY_NAME=Citation Verification
     USECASE=Confirm that a case citation or statutory reference is real before it goes into a memo, opinion, notice or pleading
     INSTRUCTIONS=1. Pass the citation exactly as written, 2. Read the verdict, 3. Present anything other than VERIFIED with its warning intact - never silently drop or reword a failed citation
-    INPUT_DESCRIPTION=citation (string, required): one citation, e.g. "(2014) 9 SCC 129", "AIR 1973 SC 1461", "2024:BHC-AS:12345", or "Section 138 of the Negotiable Instruments Act, 1881". use_dual_source (bool, optional, default True): if True, falls back to Indian Kanoon when open_data cannot verify.
     OUTPUT_DESCRIPTION=Dictionary with status, the parsed citation, verdict (VERIFIED, NOT_FOUND, AMBIGUOUS or UNCHECKED), matching authorities, confidence score, and a note explaining the verdict
     EXAMPLES=verify_citation("(2014) 9 SCC 129"), verify_citation("Section 27 of the Indian Contract Act, 1872")
     PREREQUISITES=Case citations need INDIAN_KANOON_API_KEY and cost Rs 0.50; statutory citations are checked offline and are free
@@ -685,9 +718,16 @@ async def verify_citation(
 
 
 async def verify_all_citations(
-    text: str,
-    max_citations: int = 25,
-    use_dual_source: bool = True,
+    text: Annotated[str, Field(description="the prose to sweep")],
+    max_citations: Annotated[
+        int, Field(description="cap on case citations verified, to bound cost")
+    ] = 25,
+    use_dual_source: Annotated[
+        bool,
+        Field(
+            description="if True, falls back to Indian Kanoon when open_data cannot verify"
+        ),
+    ] = True,
     ctx: Optional[Context] = None,
 ) -> Dict[str, Any]:
     """Extract and verify every citation in a block of text.
@@ -696,7 +736,6 @@ async def verify_all_citations(
     DISPLAY_NAME=Document Citation Sweep
     USECASE=Sweep a memo, opinion, notice or pleading for fabricated or mistaken authority before it is presented or sent
     INSTRUCTIONS=1. Pass the full text, 2. Read the summary counts first, 3. Reproduce every unverified citation to the user with its warning - a draft with unverified authority must be presented as such, never cleaned up silently
-    INPUT_DESCRIPTION=text (string, required): the prose to sweep. max_citations (int, optional, default 25): cap on case citations verified, to bound cost. use_dual_source (bool, optional, default True): if True, falls back to Indian Kanoon when open_data cannot verify.
     OUTPUT_DESCRIPTION=Dictionary with status, per-citation verdicts, counts by verdict, confidence scores, an all_verified flag, a verification summary, and the total spend incurred
     EXAMPLES=verify_all_citations(draft_memo_text), verify_all_citations(notice_text, max_citations=10)
     PREREQUISITES=Case citations cost Rs 0.50 each against the Indian Kanoon budget; statutory citations are free. Unchanged citations are served from a 24-hour disk cache, so repeat sweeps cost nothing
@@ -851,10 +890,13 @@ async def verify_all_citations(
 
 
 async def build_research_memo(
-    issue: str,
-    queries: Optional[List[str]] = None,
-    court: Optional[str] = None,
-    max_authorities: int = 6,
+    issue: Annotated[str, Field(description="the legal question")],
+    queries: Annotated[
+        Optional[List[str]],
+        Field(description="search phrasings; the issue text is used if omitted"),
+    ] = None,
+    court: Annotated[Optional[str], Field(description="court filter")] = None,
+    max_authorities: Annotated[int, Field(description="cap on judgments gathered")] = 6,
     ctx: Optional[Context] = None,
 ) -> Dict[str, Any]:
     """Assemble the sourced evidence base for a legal research memo.
@@ -863,7 +905,6 @@ async def build_research_memo(
     DISPLAY_NAME=Research Memo Builder
     USECASE=Gather and verify the authorities needed to answer a legal question, ready to be written up as a memo
     INSTRUCTIONS=1. State the issue as a legal question, 2. Supply two to four search queries covering different phrasings of the point, 3. Read the returned authorities, 4. Write the memo yourself from what came back - this tool gathers evidence, it does not draft the analysis
-    INPUT_DESCRIPTION=issue (string, required): the legal question. queries (list of strings, optional): search phrasings; the issue text is used if omitted. court (string, optional): court filter. max_authorities (int, optional, default 6): cap on judgments gathered.
     OUTPUT_DESCRIPTION=Dictionary with status, the issue, per-query results, a de-duplicated authority list, the citation sweep, cost incurred, and explicit drafting instructions
     EXAMPLES=build_research_memo("Is a post-termination non-compete enforceable against an employee in India?", queries=["section 27 Contract Act restraint of trade employment", "negative covenant post termination employee void"])
     PREREQUISITES=Run sync_case_law for the relevant courts and years. Free on the default open-data backend.
@@ -957,10 +998,21 @@ async def build_research_memo(
 
 
 async def sync_case_law(
-    courts: Optional[List[str]] = None,
-    from_year: int = 2015,
-    to_year: int = 2026,
-    force: bool = False,
+    courts: Annotated[
+        Optional[List[str]],
+        Field(
+            description='e.g. ["Supreme Court", "Bombay High Court"]; defaults to the Supreme Court plus the configured default High Court'
+        ),
+    ] = None,
+    from_year: Annotated[
+        int, Field(description="inclusive start year, default 2015")
+    ] = 2015,
+    to_year: Annotated[
+        int, Field(description="inclusive end year, default 2026")
+    ] = 2026,
+    force: Annotated[
+        bool, Field(description="re-download files already present")
+    ] = False,
 ) -> Dict[str, Any]:
     """Download free judgment metadata so case-law search works offline.
 
@@ -968,7 +1020,6 @@ async def sync_case_law(
     DISPLAY_NAME=Case Law Corpus Sync
     USECASE=Set up or widen the local free case-law corpus for the courts and years the user actually needs
     INSTRUCTIONS=1. Run once before first use, 2. Start narrow - the default state High Court plus the Supreme Court for recent years, 3. Widen the year range later if a search comes up empty, 4. Tell the user this downloads tens of MB and takes a minute or two
-    INPUT_DESCRIPTION=courts (list of strings, optional): e.g. ["Supreme Court", "Bombay High Court"]; defaults to the Supreme Court plus the configured default High Court. from_year/to_year (int, optional): inclusive year range, default 2015-2026. force (bool, optional): re-download files already present.
     OUTPUT_DESCRIPTION=Dictionary with status, per-court file counts, years and benches synced, megabytes downloaded, and the attribution required by the licence
     EXAMPLES=sync_case_law(), sync_case_law(courts=["Supreme Court"], from_year=2020, to_year=2026), sync_case_law(courts=["Bombay High Court", "Delhi"], from_year=2023, to_year=2026)
     PREREQUISITES=Internet access. No API key, no account, no charge - the data is public and CC-BY-4.0.
@@ -1060,7 +1111,6 @@ def case_law_status() -> Dict[str, Any]:
     DISPLAY_NAME=Case Law Source Status
     USECASE=Check before researching whether case law is available and which courts and years are actually searchable
     INSTRUCTIONS=1. Call before a research task, 2. If the corpus is not synced or the years needed are missing, run sync_case_law, 3. Never treat an empty search over an unsynced range as proof that no authority exists
-    INPUT_DESCRIPTION=No parameters
     OUTPUT_DESCRIPTION=Dictionary with status, the active backend, whether it is usable, the courts and years synced, cached PDF count, and the cost model
     EXAMPLES=case_law_status()
     PREREQUISITES=None

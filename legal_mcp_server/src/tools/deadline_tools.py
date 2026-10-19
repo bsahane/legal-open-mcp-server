@@ -6,7 +6,9 @@ discussed, not after.
 """
 
 from datetime import date, datetime
-from typing import Any, Dict, List, Optional, cast
+from typing import Annotated, Any, Dict, List, Optional, cast
+
+from pydantic import Field
 
 from legal_mcp_server.src.domain import holidays, limitation
 from legal_mcp_server.utils.pylogger import get_python_logger
@@ -25,14 +27,37 @@ def _parse_date(value: Optional[str], field: str) -> Optional[date]:
 
 
 def compute_limitation(
-    claim_type: str,
-    start_date: str,
-    as_on: Optional[str] = None,
-    acknowledgment_date: Optional[str] = None,
-    copy_application_date: Optional[str] = None,
-    copy_ready_date: Optional[str] = None,
-    wrong_forum_days: int = 0,
-    court: Optional[str] = None,
+    claim_type: Annotated[
+        str,
+        Field(
+            description='rule key such as "breach_of_contract", "money_lent", "consumer_complaint", "appeal_hc_decree"'
+        ),
+    ],
+    start_date: Annotated[
+        str, Field(description="YYYY-MM-DD, when the period starts running")
+    ],
+    as_on: Annotated[
+        Optional[str], Field(description="date to measure against, defaults to today")
+    ] = None,
+    acknowledgment_date: Annotated[
+        Optional[str],
+        Field(description="written acknowledgment of liability under section 18"),
+    ] = None,
+    copy_application_date: Annotated[
+        Optional[str],
+        Field(description="date the certified copy was applied for, section 12(2)"),
+    ] = None,
+    copy_ready_date: Annotated[
+        Optional[str],
+        Field(description="date the certified copy was ready, section 12(2)"),
+    ] = None,
+    wrong_forum_days: Annotated[
+        int, Field(description="days excluded under section 14")
+    ] = 0,
+    court: Annotated[
+        Optional[str],
+        Field(description="court whose holiday calendar applies for section 4"),
+    ] = None,
 ) -> Dict[str, Any]:
     """Compute the limitation position for a claim under the Limitation Act, 1963.
 
@@ -40,7 +65,6 @@ def compute_limitation(
     DISPLAY_NAME=Limitation Period Calculator
     USECASE=Establish whether a claim is still in time, and by how long, before advising on its merits
     INSTRUCTIONS=1. Identify the claim type with find_limitation_rule if unsure, 2. Supply the date the cause of action arose, 3. Add any acknowledgment, certified-copy or wrong-forum facts, 4. Report the expiry date, the article relied on, and any caution attached to it
-    INPUT_DESCRIPTION=claim_type (string, required): rule key such as "breach_of_contract", "money_lent", "consumer_complaint", "appeal_hc_decree". start_date (string, required): YYYY-MM-DD, when the period starts running. as_on (string, optional): date to measure against, defaults to today. acknowledgment_date (string, optional): written acknowledgment of liability under section 18. copy_application_date/copy_ready_date (string, optional): certified copy dates for section 12(2). wrong_forum_days (int, optional): days excluded under section 14. court (string, optional): court whose holiday calendar applies for section 4.
     OUTPUT_DESCRIPTION=Dictionary with status, the rule and its authority, expiry date, days remaining, expired flag, every exclusion applied, step-by-step reasoning, and the confidence of the holiday calendar used
     EXAMPLES=compute_limitation("breach_of_contract", "2023-04-10"), compute_limitation("money_lent", "2021-01-15", acknowledgment_date="2023-06-01"), compute_limitation("appeal_hc_decree", "2026-05-02", copy_application_date="2026-05-05", copy_ready_date="2026-05-20")
     PREREQUISITES=None - fully offline. Install a court holiday calendar for accurate section 4 treatment.
@@ -163,14 +187,21 @@ def compute_limitation(
         }
 
 
-def find_limitation_rule(description: str, limit: int = 8) -> Dict[str, Any]:
+def find_limitation_rule(
+    description: Annotated[
+        str,
+        Field(
+            description='the claim in plain words, e.g. "unpaid invoice", "ex parte decree", "arbitral award", "defective product"'
+        ),
+    ],
+    limit: Annotated[int, Field(description="maximum candidates")] = 8,
+) -> Dict[str, Any]:
     """Find the limitation rule that governs a described claim.
 
     TOOL_NAME=find_limitation_rule
     DISPLAY_NAME=Limitation Rule Finder
     USECASE=Identify which limitation article applies when you know the nature of the claim but not the article
     INSTRUCTIONS=1. Describe the claim in a few words, 2. Read the candidate rules and their starting points, 3. Pass the chosen key to compute_limitation
-    INPUT_DESCRIPTION=description (string, required): the claim in plain words, e.g. "unpaid invoice", "ex parte decree", "arbitral award", "defective product". limit (int, optional, default 8): maximum candidates.
     OUTPUT_DESCRIPTION=Dictionary with status, candidate rules including key, period, starting point, governing article, whether delay is condonable, and any caution
     EXAMPLES=find_limitation_rule("unpaid invoice for goods supplied"), find_limitation_rule("set aside arbitration award"), find_limitation_rule("ex parte decree")
     PREREQUISITES=None - fully offline
@@ -227,7 +258,6 @@ def list_limitation_rules() -> Dict[str, Any]:
     DISPLAY_NAME=Limitation Rule Catalogue
     USECASE=See the full set of limitation periods available before deciding whether a claim's period is modelled here at all
     INSTRUCTIONS=1. Call to review coverage, 2. If the claim is not listed, say the period is not modelled rather than inventing one
-    INPUT_DESCRIPTION=No parameters
     OUTPUT_DESCRIPTION=Dictionary with status, every rule grouped by source Act, and the total count
     EXAMPLES=list_limitation_rules()
     PREREQUISITES=None
@@ -269,9 +299,19 @@ def list_limitation_rules() -> Dict[str, Any]:
 
 
 def compute_cheque_bounce_timeline(
-    dishonour_date: str,
-    notice_date: Optional[str] = None,
-    notice_served_date: Optional[str] = None,
+    dishonour_date: Annotated[
+        str,
+        Field(description="YYYY-MM-DD, when the bank's dishonour memo was received"),
+    ],
+    notice_date: Annotated[
+        Optional[str], Field(description="when the demand notice was issued")
+    ] = None,
+    notice_served_date: Annotated[
+        Optional[str],
+        Field(
+            description="when it was actually served - service, not dispatch, starts the payment clock"
+        ),
+    ] = None,
 ) -> Dict[str, Any]:
     """Compute every deadline in a section 138 Negotiable Instruments Act matter.
 
@@ -279,7 +319,6 @@ def compute_cheque_bounce_timeline(
     DISPLAY_NAME=Cheque Dishonour Deadline Timeline
     USECASE=Work out the notice and complaint deadlines in a dishonoured-cheque matter, where the first deadline is non-extendable and routinely missed
     INSTRUCTIONS=1. Give the date the drawer learned of dishonour from the bank, 2. Give the notice date and, if known, the actual service date, 3. Act on the earliest pending deadline, 4. Warn the user explicitly that the 30-day notice period cannot be extended
-    INPUT_DESCRIPTION=dishonour_date (string, required): YYYY-MM-DD, when the bank's dishonour memo was received. notice_date (string, optional): when the demand notice was issued. notice_served_date (string, optional): when it was actually served - service, not dispatch, starts the payment clock.
     OUTPUT_DESCRIPTION=Dictionary with status, each of the three steps with its deadline, authority and whether it is condonable, the cause-of-action date, the complaint deadline, and a note on territorial jurisdiction
     EXAMPLES=compute_cheque_bounce_timeline("2026-07-15"), compute_cheque_bounce_timeline("2026-07-15", notice_date="2026-07-20", notice_served_date="2026-07-24")
     PREREQUISITES=None - fully offline
@@ -355,11 +394,15 @@ def compute_cheque_bounce_timeline(
 
 
 def compute_deadline(
-    start_date: str,
-    value: int,
-    unit: str = "days",
-    working_days_only: bool = False,
-    court: Optional[str] = None,
+    start_date: Annotated[str, Field(description="YYYY-MM-DD")],
+    value: Annotated[int, Field(description="length of the period")],
+    unit: Annotated[str, Field(description='"days", "months" or "years"')] = "days",
+    working_days_only: Annotated[
+        bool, Field(description="count only days the court is open")
+    ] = False,
+    court: Annotated[
+        Optional[str], Field(description="whose holiday calendar to use")
+    ] = None,
 ) -> Dict[str, Any]:
     """Add a period to a date, respecting court closures.
 
@@ -367,7 +410,6 @@ def compute_deadline(
     DISPLAY_NAME=Deadline Calculator
     USECASE=Work out any procedural date - a notice period, a reply deadline, a next hearing - with court holidays taken into account
     INSTRUCTIONS=1. Give the starting date and the period, 2. Set working_days_only where the rule counts working days, 3. Read the calendar_confidence field before relying on a date close to the limit
-    INPUT_DESCRIPTION=start_date (string, required): YYYY-MM-DD. value (int, required): length of the period. unit (string, optional, default "days"): "days", "months" or "years". working_days_only (bool, optional, default False): count only days the court is open. court (string, optional): whose holiday calendar to use.
     OUTPUT_DESCRIPTION=Dictionary with status, the computed deadline, whether it fell on a closure and was moved, the next working day, and the confidence of the calendar used
     EXAMPLES=compute_deadline("2026-08-02", 30), compute_deadline("2026-08-02", 3, unit="months"), compute_deadline("2026-08-02", 10, working_days_only=True)
     PREREQUISITES=None. Install a court holiday calendar at data/reference/court_holidays.json for festival and vacation accuracy.
@@ -440,14 +482,19 @@ def compute_deadline(
         }
 
 
-def get_court_holidays(year: int, court: Optional[str] = None) -> Dict[str, Any]:
+def get_court_holidays(
+    year: Annotated[int, Field(description="calendar year")],
+    court: Annotated[
+        Optional[str],
+        Field(description="court name, defaults to the configured High Court"),
+    ] = None,
+) -> Dict[str, Any]:
     """List the court closures known for a year.
 
     TOOL_NAME=get_court_holidays
     DISPLAY_NAME=Court Holiday Calendar
     USECASE=Check which days a court is closed, and whether a calendar is installed at all before trusting a working-day computation
     INSTRUCTIONS=1. Call for the relevant year, 2. If calendar_installed is false, tell the user that festival holidays and vacations are not accounted for and point them at the court's published list
-    INPUT_DESCRIPTION=year (int, required): calendar year. court (string, optional): court name, defaults to the configured High Court.
     OUTPUT_DESCRIPTION=Dictionary with status, known closures with occasions, whether a published calendar is installed, which years are covered, and the install path
     EXAMPLES=get_court_holidays(2026), get_court_holidays(2026, court="Bombay High Court")
     PREREQUISITES=None

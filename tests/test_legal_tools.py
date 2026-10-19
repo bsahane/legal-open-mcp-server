@@ -1017,11 +1017,22 @@ class TestWireDescription:
         for loader in TOOL_GROUPS.values():
             for tool in loader():
                 desc = _wire_description(tool)
-                assert "USECASE=" in desc and "INPUT_DESCRIPTION=" in desc
+                assert "USECASE=" in desc
                 for dropped in (
+                    "INPUT_DESCRIPTION=",
                     "EXAMPLES=",
                     "TOOL_NAME=",
                     "OUTPUT_DESCRIPTION=",
                     "Args:",
                 ):
                     assert dropped not in desc, f"{tool.__name__} leaks {dropped}"
+
+    @pytest.mark.asyncio
+    async def test_parameter_descriptions_reach_input_schema(self):
+        """Parameter docs travel in the schema, not the description."""
+        from legal_mcp_server.src.mcp import LegalMCPServer
+
+        tools = await LegalMCPServer().mcp.get_tools()
+        props = tools["search_case_law"].parameters["properties"]
+        assert "all terms must appear" in props["query"]["description"]
+        assert "lower bound" in props["from_date"]["description"]

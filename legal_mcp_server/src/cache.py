@@ -15,12 +15,14 @@ straight through to the live lookup, and a failed write is logged and ignored.
 
 import asyncio
 import hashlib
+import re
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Optional
 
 import diskcache
 
+from legal_mcp_server.src.domain.citations import STATUTE_ABBREVIATIONS
 from legal_mcp_server.src.settings import settings
 from legal_mcp_server.utils.pylogger import get_python_logger
 
@@ -29,6 +31,19 @@ logger = get_python_logger()
 CACHE_TTL_SECONDS = 86400  # 24 hours
 CACHE_SIZE_LIMIT = 500 * 1024 * 1024  # 500 MB
 
+# "s. 420 ipc" and "section 420 of the Indian Penal Code, 1860" are the same
+# proposition, so keying on the raw query string would serve two cache entries
+# for one question. Expand statute initials against the shared table the rest of
+# the server already treats as canonical. Longest keys first so "ni act" wins
+# over "ni", and word boundaries keep abbreviations out of ordinary words.
+_ABBREVIATION_RE = re.compile(
+    "|".join(
+        rf"\b{re.escape(k)}\b"
+        for k in sorted(STATUTE_ABBREVIATIONS, key=len, reverse=True)
+    ),
+    re.IGNORECASE,
+)
+
 
 @lru_cache(maxsize=1)
 def _get_cache() -> diskcache.Cache:
@@ -36,6 +51,25 @@ def _get_cache() -> diskcache.Cache:
     directory = Path(settings.LEGAL_DATA_PATH) / "cache" / "case_law"
     directory.mkdir(parents=True, exist_ok=True)
     return diskcache.Cache(str(directory), size_limit=CACHE_SIZE_LIMIT)
+
+
+def _normalize_query(query: str) -> str:
+    """Canonicalize a query so cosmetic phrasing differences share one entry.
+
+    Collapses internal whitespace, lowercases, and expands statute initials.
+    Deliberately conservative: only whitespace and known abbreviations are
+    folded, so two genuinely different propositions never collide. Filtering is
+    a cache optimisation, never a correctness gate.
+
+    Lowercasing happens AFTER the expansion: expanding then lowering keeps the
+    result stable under a second pass, so a query and its own normalization
+    key compare identically.
+    """
+    collapsed = " ".join(query.strip().split())
+    expanded = _ABBREVIATION_RE.sub(
+        lambda m: STATUTE_ABBREVIATIONS[m.group(0).lower()], collapsed
+    )
+    return expanded.lower()
 
 
 def _cache_key(
@@ -47,7 +81,7 @@ def _cache_key(
     limit: int,
     page: int,
 ) -> str:
-    raw = f"{query}|{court}|{from_date}|{to_date}|{judge}|{limit}|{page}"
+    raw = f"{_normalize_query(query)}|{court}|{from_date}|{to_date}|{judge}|{limit}|{page}"
     return f"search|{hashlib.sha256(raw.encode()).hexdigest()}"
 
 
