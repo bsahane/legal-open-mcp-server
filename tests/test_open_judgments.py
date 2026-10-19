@@ -613,6 +613,33 @@ class TestFullTextIndex:
         assert "elapsed_seconds" in second
         assert corpus._fts_available() is True
 
+    def test_rebuild_while_reader_holds_live_file(self, corpus):
+        """A held read-only handle must not block a rebuild.
+
+        Regression: the nightly cron rebuilt in place and hit DuckDB's lock
+        held by the running server. The rebuild now writes a side file and
+        swaps it in; readers reopen on the new inode.
+        """
+        import duckdb
+
+        self._build(corpus)
+        old_reader = corpus._connect_fts()
+        outside = duckdb.connect(str(corpus._fts_path()), read_only=True)
+        try:
+            result = corpus.build_fts_index(force=True)
+        finally:
+            outside.close()
+
+        assert result["rebuilt"] is True
+        assert not corpus._fts_path().with_name("corpus.duckdb.building").exists()
+        reader = corpus._connect_fts()
+        assert reader is not old_reader
+        hits = reader.execute(
+            "SELECT count(*) FROM corpus "
+            "WHERE fts_main_corpus.match_bm25(id, 'cheque') IS NOT NULL"
+        ).fetchone()
+        assert hits is not None
+
     def test_stale_after_newer_metadata(self, corpus):
         self._build(corpus)
         assert corpus._fts_available() is True

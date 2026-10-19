@@ -685,9 +685,25 @@ class OpenJudgmentsClient:
         return True
 
     def _connect_fts(self):
-        """Thread-local read-only connection to the FTS corpus file."""
+        """Thread-local read-only connection to the FTS corpus file.
+
+        Reopens when the file's inode changes: a rebuild in another process
+        (the nightly cron) swaps a new file in with os.replace, and a handle
+        on the old inode would keep serving the previous index forever.
+        """
         entry = getattr(self._local, "fts_conn", None)
-        if entry is None or entry[0] != self._generation:
+        try:
+            inode = self._fts_path().stat().st_ino
+        except OSError:
+            inode = None
+        if entry is None or entry[0] != self._generation or entry[2] != inode:
+            if entry is not None:
+                try:
+                    entry[1].close()
+                except Exception:  # noqa: BLE001 - stale handle, best-effort
+                    pass
+                with self._conns_lock:
+                    self._conns.discard(entry[1])
             try:
                 import duckdb
             except ImportError as exc:  # pragma: no cover - dependency declared
@@ -701,7 +717,7 @@ class OpenJudgmentsClient:
             conn.execute("LOAD fts")
             with self._conns_lock:
                 self._conns.add(conn)
-            self._local.fts_conn = (self._generation, conn)
+            self._local.fts_conn = (self._generation, conn, inode)
             return conn
         return entry[1]
 
@@ -750,7 +766,14 @@ class OpenJudgmentsClient:
             logger.debug("DuckDB FTS extension already installed")
         probe.close()
 
-        con = duckdb.connect(str(path))
+        # Build into a side file and swap it in at the end. Opening the live
+        # file read-write fails while any process (the running server, when
+        # the nightly cron rebuilds) holds a read-only handle on it, and a
+        # build that dies midway would otherwise leave a corpus table with no
+        # BM25 index that still looks fresh to _fts_available.
+        building = path.with_name(path.name + ".building")
+        building.unlink(missing_ok=True)
+        con = duckdb.connect(str(building))
         started = time.monotonic()
         try:
             # Large builds (multi-million rows) spill aggressively; keep the
@@ -798,11 +821,15 @@ class OpenJudgmentsClient:
                 f"FTS build: BM25 index created in "
                 f"{time.monotonic() - started:.1f}s total; committing"
             )
-        finally:
+        except BaseException:
             con.close()
+            building.unlink(missing_ok=True)
+            raise
+        con.close()
+        os.replace(building, path)
 
         elapsed = time.monotonic() - started
-        # Invalidate any cached read-only connections to the file.
+        # Readers in this process reopen on the new inode; close them now too.
         self._close_duckdb()
         logger.info(f"FTS build: committed {count} rows to {path} in {elapsed:.1f}s")
 
@@ -819,17 +846,53 @@ class OpenJudgmentsClient:
         }
 
     @staticmethod
+    def _container_memory_bytes() -> Optional[int]:
+        """Best-effort total RAM the *container* is entitled to.
+
+        Resolution order, first finite value wins:
+
+        1. cgroup v2 ``memory.max`` - the real enforced limit, when one is set.
+        2. ``/proc/meminfo`` ``MemTotal`` - in a PVE container this is
+           lxcfs-backed and correctly reports the ``memory:`` allocation.
+        3. ``sysconf`` - bare-metal fallback.
+
+        ``sysconf`` alone is wrong in a container: it reports the *host's*
+        pages (16 GB here) even though the container is allocated 4 GB. Because
+        PVE does not necessarily set a hard cgroup cap, preferring it lets a
+        build claim far more than the slice it was given and evict other tenants.
+        """
+        try:
+            with open("/sys/fs/cgroup/memory.max", encoding="ascii") as fh:
+                raw = fh.read().strip()
+            if raw and raw != "max":
+                return int(raw)
+        except (OSError, ValueError):  # noqa: BLE001 - advisory probe
+            pass
+
+        try:
+            with open("/proc/meminfo", encoding="ascii") as fh:
+                for line in fh:
+                    if line.startswith("MemTotal:"):
+                        parts = line.split()
+                        if len(parts) >= 2:
+                            return int(parts[1]) * 1024
+        except (OSError, ValueError):  # noqa: BLE001 - advisory probe
+            pass
+
+        try:
+            return os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES")
+        except (ValueError, OSError, AttributeError):  # pragma: no cover
+            return None
+
+    @staticmethod
     def _apply_duckdb_resource_guards(con: Any) -> None:
         """Bound a build connection's memory use; best-effort, never raises.
 
-        Caps DuckDB at ~60% of reported RAM (max 8 GB) when the OS exposes
-        it; on any failure the defaults stay in force.
+        Caps DuckDB at ~60% of the container's RAM (max 8 GB) when a size can
+        be determined; on any failure the defaults stay in force.
         """
-        try:
-            page_size = os.sysconf("SC_PAGE_SIZE")
-            page_count = os.sysconf("SC_PHYS_PAGES")
-            total_bytes = page_size * page_count
-        except (ValueError, OSError, AttributeError):  # pragma: no cover
+        total_bytes = OpenJudgmentsClient._container_memory_bytes()
+        if not total_bytes or total_bytes <= 0:
             return
         limit_bytes = min(int(total_bytes * 0.6), 8 * 1024**3)
         try:
@@ -837,7 +900,8 @@ class OpenJudgmentsClient:
             con.execute("SET preserve_insertion_order=false")
             logger.info(
                 f"FTS build: memory_limit="
-                f"{limit_bytes // (1024**2)}MB, preserve_insertion_order=off"
+                f"{limit_bytes // (1024**2)}MB of {total_bytes // (1024**2)}MB "
+                f"container RAM, preserve_insertion_order=off"
             )
         except Exception as e:  # noqa: BLE001 - guards are advisory
             logger.warning(f"FTS build: could not apply resource guards: {e}")
@@ -874,8 +938,13 @@ class OpenJudgmentsClient:
             await self._http.aclose()
             self._http = None
 
-    def _close_duckdb(self) -> None:
-        """Drop every cached DuckDB connection; safe to call repeatedly."""
+    def _close_duckdb_handles(self) -> None:
+        """Close every cached DuckDB connection; safe to call repeatedly.
+
+        Closing alone does not retire the per-thread caches, so this also
+        bumps the generation: otherwise a later query would resurrect a handle
+        that is no longer open.
+        """
         self._generation += 1
         with self._conns_lock:
             conns = list(self._conns)
@@ -885,6 +954,10 @@ class OpenJudgmentsClient:
                 conn.close()
             except Exception:  # noqa: BLE001 - best-effort shutdown
                 logger.debug("Could not close a DuckDB connection", exc_info=True)
+
+    def _close_duckdb(self) -> None:
+        """Retire cached DuckDB connections; see :meth:`_close_duckdb_handles`."""
+        self._close_duckdb_handles()
 
     def _search_sql(self, scope: str) -> Tuple[str, List[str]]:
         """Build the UNION query covering the requested scope.
