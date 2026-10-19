@@ -109,6 +109,9 @@ def main() -> None:
             port=settings.MCP_PORT,
             log_config=get_uvicorn_log_config(settings.PYTHON_LOG_LEVEL),
             timeout_graceful_shutdown=settings.MCP_GRACEFUL_SHUTDOWN_SECONDS,
+            # Every MCP transport here is plain HTTP; skipping websocket
+            # support also skips uvicorn's deprecated websockets.legacy import.
+            ws="none",
             **uvicorn_config,
         )
 
