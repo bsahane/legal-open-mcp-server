@@ -669,6 +669,26 @@ class TestFullTextIndex:
         ).fetchone()
         assert hits[0] >= 1
 
+    def test_swap_closes_idle_threads_handles(self, corpus):
+        """After a rebuild from another process, no thread pins the old file."""
+        import threading
+
+        self._build(corpus)
+        idle = {}
+        thread = threading.Thread(target=lambda: idle.update(c=corpus._connect_fts()))
+        thread.start()
+        thread.join()
+        corpus._connect_fts()  # this thread's handle, same inode
+
+        # Simulate the nightly cron: a rebuild in another client instance.
+        other = open_judgments.OpenJudgmentsClient(data_path=str(corpus.root))
+        other.build_fts_index(force=True)
+        corpus._connect_fts()  # first search after the swap
+
+        assert idle["c"] not in corpus._conns
+        with pytest.raises(Exception):
+            idle["c"].execute("SELECT 1")  # closed, so the old inode is free
+
     def test_build_uses_temp_dir_and_clears_crash_leftovers(self, corpus, tmp_path):
         """A crashed build's journal and spill dir must not survive a rebuild."""
         live = corpus._fts_path()

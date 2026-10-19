@@ -754,6 +754,14 @@ class OpenJudgmentsClient:
             inode = self._fts_path().stat().st_ino
         except OSError:
             inode = None
+        seen = getattr(self, "_fts_inode", inode)
+        self._fts_inode = inode
+        if seen != inode:
+            # A rebuild swapped the file. Close every thread's handle, not
+            # just this one: an idle thread's handle pins the old ~13 GB file
+            # on disk until the process restarts. A query racing on another
+            # thread fails once and falls back to the LIKE path.
+            self._close_duckdb_handles()
         if entry is None or entry[0] != self._generation or entry[2] != inode:
             if entry is not None:
                 try:
