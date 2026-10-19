@@ -80,8 +80,14 @@ def _cache_key(
     judge: Optional[str],
     limit: int,
     page: int,
+    version: str = "",
 ) -> str:
-    raw = f"{_normalize_query(query)}|{court}|{from_date}|{to_date}|{judge}|{limit}|{page}"
+    # `version` names the corpus that answered: without it, a search cached
+    # before a sync or an index update kept serving the old answer for a day.
+    raw = (
+        f"{_normalize_query(query)}|{court}|{from_date}|{to_date}|{judge}"
+        f"|{limit}|{page}|{version}"
+    )
     return f"search|{hashlib.sha256(raw.encode()).hexdigest()}"
 
 
@@ -113,9 +119,10 @@ async def get_cached(
     judge: Optional[str] = None,
     limit: int = 20,
     page: int = 0,
+    version: str = "",
 ) -> Optional[Any]:
     """Return the cached search response, or None on miss/expiry/error."""
-    key = _cache_key(query, court, from_date, to_date, judge, limit, page)
+    key = _cache_key(query, court, from_date, to_date, judge, limit, page, version)
     return await get_cached_value(key)
 
 
@@ -128,12 +135,13 @@ async def set_cached(
     judge: Optional[str] = None,
     limit: int = 20,
     page: int = 0,
+    version: str = "",
 ) -> None:
     """Store a successful search response under its query key.
 
     Failures are logged and swallowed so caching can never break a search.
     """
-    key = _cache_key(query, court, from_date, to_date, judge, limit, page)
+    key = _cache_key(query, court, from_date, to_date, judge, limit, page, version)
     await set_cached_value(data, key)
 
 

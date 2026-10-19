@@ -141,14 +141,16 @@ def _recent() -> dict:
 
 
 def _fts_rebuild() -> dict:
-    """Rebuild the BM25 FTS index over the freshly synced corpus.
+    """Bring the FTS index up to date with the freshly synced corpus.
 
     Search silently falls back to a slower LIKE scan whenever any synced
     metadata parquet is newer than ``data/case_law/fts/corpus.sqlite``, so
     the nightly job must refresh the index or every search the next day
     pays the fallback cost until someone runs ``make fts`` by hand. Runs
     after all judgment sources (open data + archives) are final so a single
-    rebuild covers them.
+    update covers them. The update re-indexes only the Parquet files the
+    sync changed, in place, so it takes seconds and needs no spare disk for
+    a second copy of the index.
 
     The build logs its own progress to stderr (parquet scan, corpus table,
     index creation, commit), so an unattended failure always leaves a trail.
@@ -166,15 +168,24 @@ def _fts_rebuild() -> dict:
         if client._fts_available():
             log.info("FTS index already fresh; skipping rebuild")
             return {"status": "ok", "rebuilt": False}
-        log.info("Rebuilding FTS index over the synced corpus")
-        summary = client.build_fts_index(force=True)
+        log.info("Updating FTS index from the synced corpus")
+        summary = client.build_fts_index()
         elapsed = round(time.monotonic() - started, 1)
         rows = summary.get("rows")
         path = summary.get("path")
-        log.info("FTS index rebuilt: %s rows in %.1fs at %s", rows, elapsed, path)
+        files = summary.get("files_reindexed")
+        log.info(
+            "FTS index updated: %s files re-indexed, %s rows in %.1fs at %s",
+            files,
+            rows,
+            elapsed,
+            path,
+        )
         return {
             "status": "ok",
             "rebuilt": True,
+            "full_rebuild": bool(summary.get("rebuilt")),
+            "files_reindexed": files,
             "rows": rows,
             "path": path,
             "elapsed_seconds": elapsed,

@@ -15,9 +15,20 @@ This project uses [GitHub Releases](https://github.com/redhat-data-and-ai/legal-
   terms are prefix matches over title and description, and the court filter
   is matched inside the index. Rebuild with `make fts`; the old
   `corpus.duckdb` file is no longer read and can be deleted.
+- `build_fts_index()` (and the nightly sync) now re-indexes only the Parquet
+  files that are new, changed or removed since the last build, in place.
+  A nightly update takes seconds instead of a 30-minute full build and needs
+  no disk for a second copy of the index. `force=True` (`make fts`) still
+  does a full rebuild; an index built before per-file tracking gets one
+  automatically.
+- uvicorn no longer loads websocket support (`ws="none"`); no MCP transport
+  uses it, and it pulled in the deprecated `websockets.legacy` module.
 
 ### Fixed
 
+- Cached case-law searches are keyed on the corpus version (index and
+  newest metadata mtime), so a sync or index update no longer leaves
+  pre-update answers in the 24-hour search cache.
 - Root-cause fixed: `_configure_third_party_loggers` cleared **all** root
   logger handlers on every `get_python_logger()` call (i.e. on every module
   import with a module-level logger), silently dropping all INFO records from

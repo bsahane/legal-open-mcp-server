@@ -116,8 +116,9 @@ async def search_case_law(
         if not query or not query.strip():
             raise ValueError("query must be a non-empty string")
 
+        version = await asyncio.to_thread(case_law.corpus_version)
         cached = await get_cached(
-            query.strip(), court, from_date, to_date, judge, limit, page
+            query.strip(), court, from_date, to_date, judge, limit, page, version
         )
         if cached is not None:
             cached["cached"] = True
@@ -164,7 +165,15 @@ async def search_case_law(
             if key in payload:
                 response[key] = payload[key]
         await set_cached(
-            response, query.strip(), court, from_date, to_date, judge, limit, page
+            response,
+            query.strip(),
+            court,
+            from_date,
+            to_date,
+            judge,
+            limit,
+            page,
+            version,
         )
         return response
 

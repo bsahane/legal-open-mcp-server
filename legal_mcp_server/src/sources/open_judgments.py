@@ -672,6 +672,22 @@ class OpenJudgmentsClient:
         """Persistent SQLite file holding the corpus table + FTS5 index."""
         return self.root / "fts" / "corpus.sqlite"
 
+    def _metadata_files(self) -> Dict[str, int]:
+        """Every synced metadata Parquet file mapped to its mtime in ns."""
+        files: Dict[str, int] = {}
+        for pattern in (
+            self.sc_metadata_dir.glob("year=*/metadata.parquet"),
+            self.hc_metadata_dir.glob("year=*/court=*/bench=*/metadata.parquet"),
+            self.root.glob("historical/*/metadata.parquet"),
+            self.root.glob("recent/*/metadata.parquet"),
+        ):
+            for meta in pattern:
+                try:
+                    files[str(meta)] = meta.stat().st_mtime_ns
+                except OSError:  # removed mid-scan
+                    continue
+        return files
+
     def _fts_available(self) -> bool:
         """Whether a fresh FTS index exists for the synced corpus.
 
@@ -681,24 +697,30 @@ class OpenJudgmentsClient:
         path = self._fts_path()
         if not path.is_file() or path.stat().st_size == 0:
             return False
-        index_mtime = path.stat().st_mtime
-        for pattern in (
-            self.sc_metadata_dir.glob("year=*/metadata.parquet"),
-            self.hc_metadata_dir.glob("year=*/court=*/bench=*/metadata.parquet"),
-            self.root.glob("historical/*/metadata.parquet"),
-            self.root.glob("recent/*/metadata.parquet"),
-        ):
-            for meta in pattern:
-                if meta.stat().st_mtime > index_mtime:
-                    return False
-        return True
+        index_mtime = path.stat().st_mtime_ns
+        return all(m <= index_mtime for m in self._metadata_files().values())
+
+    def corpus_version(self) -> str:
+        """A token that changes whenever search results could change.
+
+        Combines the index file's mtime with the newest metadata mtime, so a
+        sync (new Parquet) or an index update both invalidate cached searches.
+        """
+        try:
+            index = self._fts_path().stat().st_mtime_ns
+        except OSError:
+            index = 0
+        newest = max(self._metadata_files().values(), default=0)
+        return f"{index}:{newest}"
 
     def _connect_fts(self):
         """Thread-local read-only connection to the FTS corpus file.
 
-        Reopens when the file's inode changes: a rebuild in another process
-        (the nightly cron) swaps a new file in with os.replace, and a handle
-        on the old inode would keep serving the previous index forever.
+        Reopens when the file's inode changes: a full rebuild (the nightly
+        cron or the sync tool) swaps a new file in with os.replace, and a
+        handle on the old inode would keep serving the previous index forever.
+        Incremental updates write the live file in place; readers take normal
+        shared locks and see them on their next query.
         """
         entry = getattr(self._local, "fts_conn", None)
         try:
@@ -713,14 +735,14 @@ class OpenJudgmentsClient:
                     pass
                 with self._conns_lock:
                     self._conns.discard(entry[1])
-            # immutable=1: the file is only ever replaced whole (os.replace),
-            # never written in place, so SQLite can skip locking entirely and
-            # a rebuild never waits on readers. check_same_thread=False lets
-            # _close_duckdb_handles close it from whichever thread shuts down;
-            # the per-thread cache still keeps one connection per thread.
+            # check_same_thread=False lets _close_duckdb_handles close it
+            # from whichever thread shuts down; the per-thread cache still
+            # keeps one connection per thread. The timeout rides out an
+            # incremental update's brief commit lock.
             conn = sqlite3.connect(
-                f"file:{self._fts_path()}?mode=ro&immutable=1",
+                f"file:{self._fts_path()}?mode=ro",
                 uri=True,
+                timeout=30,
                 check_same_thread=False,
             )
             conn.execute("PRAGMA cache_size=-65536")  # 64 MiB page cache
@@ -731,62 +753,69 @@ class OpenJudgmentsClient:
         return entry[1]
 
     def build_fts_index(self, force: bool = False) -> Dict[str, Any]:
-        """Build the FTS index over synced metadata into a persistent file.
+        """Bring the FTS index up to date with the synced metadata.
 
-        DuckDB scans the Parquet metadata and streams it into a SQLite file
-        with an FTS5 index over title and description. The search tool uses
-        it for BM25-ranked search when it is present and fresh, falling back
-        to the LIKE-based scan otherwise. Rebuild after every sync that
-        changes the corpus.
+        DuckDB scans the Parquet metadata into a SQLite file with an FTS5
+        index over title and description. The search tool uses it for
+        BM25-ranked search when it is present and fresh, falling back to the
+        LIKE-based scan otherwise.
+
+        Without ``force`` only Parquet files that are new, changed or removed
+        since the last build are re-indexed, in place; a nightly sync touches
+        a handful of files, so this takes seconds rather than the half hour
+        of a full build. A missing index, or one built before per-file
+        tracking existed, gets a full build.
 
         Args:
-            force: Rebuild even when the index already looks fresh.
+            force: Rebuild the whole index from scratch.
 
         Returns:
-            Summary with the index path and row count.
+            Summary with the index path, row count and what was re-indexed.
         """
-        sql, _globs = self._search_sql("all")
         path = self._fts_path()
         path.parent.mkdir(parents=True, exist_ok=True)
         if not force and path.is_file() and path.stat().st_size > 0:
-            count = self._fts_row_count()
-            if count is not None:
-                return {
-                    "status": "success",
-                    "path": str(path),
-                    "rows": count,
-                    "rebuilt": False,
-                    "message": (
-                        "FTS index already present and used by search. Use "
-                        "force=True to rebuild it."
-                    ),
-                }
+            result = self._update_fts_index()
+            if result is not None:
+                return result
+        return self._full_build()
 
+    def _scan(self) -> Any:
+        """A DuckDB connection bounded for scanning Parquet into the index."""
         try:
             import duckdb
         except ImportError as exc:  # pragma: no cover - dependency declared
             raise SourceUnavailable(
                 "duckdb is required to build the open-data case-law index."
             ) from exc
+        scan = duckdb.connect()
+        # Bound the Parquet scan's memory so containerised builds are not OOM
+        # killed, and let any spill land on the scratch disk.
+        self._apply_duckdb_resource_guards(scan)
+        if settings.FTS_BUILD_TEMP_DIR:
+            Path(settings.FTS_BUILD_TEMP_DIR).mkdir(parents=True, exist_ok=True)
+            scan.execute(
+                f"SET temp_directory='{_sql_quote(settings.FTS_BUILD_TEMP_DIR)}'"
+            )
+        return scan
 
+    def _full_build(self) -> Dict[str, Any]:
+        """Build the whole index into a side file and swap it in."""
+        sql, _globs = self._search_sql("all")
+        path = self._fts_path()
         # Build into a side file and swap it in at the end, so readers (the
         # running server, when the nightly cron rebuilds) never see a
         # half-built index, and a crash leaves the previous one in service.
         building = path.with_name(path.name + ".building")
         self._discard_build(building)
-        scan = duckdb.connect()
+        # Snapshot before the scan: a file that changes during it is picked
+        # up by the next incremental update.
+        sources = self._metadata_files()
+        scan = self._scan()
         out = sqlite3.connect(str(building))
         started = time.monotonic()
         count = 0
         try:
-            # Bound the Parquet scan's memory so containerised builds are not
-            # OOM killed, and let any spill land on the scratch disk.
-            self._apply_duckdb_resource_guards(scan)
-            if settings.FTS_BUILD_TEMP_DIR:
-                Path(settings.FTS_BUILD_TEMP_DIR).mkdir(parents=True, exist_ok=True)
-                scan.execute(
-                    f"SET temp_directory='{_sql_quote(settings.FTS_BUILD_TEMP_DIR)}'"
-                )
             # The side file is discarded on any failure, so durability buys
             # nothing here: skip the journal and fsyncs.
             out.execute("PRAGMA journal_mode=OFF")
@@ -812,6 +841,11 @@ class OpenJudgmentsClient:
                 f"FTS build: corpus table ready with {count} rows "
                 f"in {time.monotonic() - started:.1f}s"
             )
+            out.execute("CREATE INDEX corpus_source ON corpus (_source)")
+            out.execute(
+                "CREATE TABLE fts_sources (path TEXT PRIMARY KEY, mtime_ns INTEGER)"
+            )
+            out.executemany("INSERT INTO fts_sources VALUES (?, ?)", sources.items())
             # External-content index: the text lives once, in `corpus`.
             # court_code is indexed so a court filter narrows inside FTS5
             # instead of re-reading every matching row. No stemming: search
@@ -826,6 +860,9 @@ class OpenJudgmentsClient:
             out.execute("INSERT INTO corpus_fts(corpus_fts) VALUES('rebuild')")
             out.execute("INSERT INTO corpus_fts(corpus_fts) VALUES('optimize')")
             out.commit()
+            # Leave the file in rollback-journal mode for the in-place
+            # incremental updates that follow.
+            out.execute("PRAGMA journal_mode=DELETE")
             logger.info(
                 f"FTS build: FTS5 index created in "
                 f"{time.monotonic() - started:.1f}s total"
@@ -849,12 +886,136 @@ class OpenJudgmentsClient:
             "path": str(path),
             "rows": int(count),
             "rebuilt": True,
+            "files_reindexed": len(sources),
             "elapsed_seconds": round(elapsed, 1),
             "message": (
                 f"Built the full-text index over {int(count)} judgments in "
                 f"{elapsed:.1f}s. Search now uses BM25 ranking."
             ),
         }
+
+    def _update_fts_index(self) -> Optional[Dict[str, Any]]:
+        """Re-index only changed Parquet files, in place.
+
+        Returns ``None`` when the index predates per-file tracking (or is
+        unreadable), so the caller does a full build instead.
+        """
+        path = self._fts_path()
+        out = sqlite3.connect(str(path), timeout=300, isolation_level=None)
+        try:
+            try:
+                recorded = dict(
+                    out.execute("SELECT path, mtime_ns FROM fts_sources").fetchall()
+                )
+            except sqlite3.DatabaseError:
+                return None
+            current = self._metadata_files()
+            changed = sorted(p for p, m in current.items() if recorded.get(p) != m)
+            removed = sorted(set(recorded) - set(current))
+            if not changed and not removed:
+                count = out.execute("SELECT count(*) FROM corpus").fetchone()[0]
+                return {
+                    "status": "success",
+                    "path": str(path),
+                    "rows": int(count),
+                    "rebuilt": False,
+                    "files_reindexed": 0,
+                    "message": "FTS index already covers every synced file.",
+                }
+
+            started = time.monotonic()
+            # Keep every dirty page in memory until commit: a spill would
+            # take the exclusive lock early and block searches for the whole
+            # update instead of just the commit.
+            out.execute("PRAGMA cache_spill=OFF")
+            out.execute("BEGIN IMMEDIATE")
+            try:
+                dropped, added = self._reindex_sources(out, changed, removed)
+                out.executemany(
+                    "DELETE FROM fts_sources WHERE path = ?",
+                    [(p,) for p in removed],
+                )
+                out.executemany(
+                    "INSERT OR REPLACE INTO fts_sources VALUES (?, ?)",
+                    [(p, current[p]) for p in changed],
+                )
+                out.execute("COMMIT")
+            except BaseException:
+                out.execute("ROLLBACK")
+                raise
+            count = out.execute("SELECT count(*) FROM corpus").fetchone()[0]
+        finally:
+            out.close()
+
+        elapsed = time.monotonic() - started
+        logger.info(
+            f"FTS update: re-indexed {len(changed)} changed and {len(removed)} "
+            f"removed files (-{dropped} +{added} rows) in {elapsed:.1f}s"
+        )
+        return {
+            "status": "success",
+            "path": str(path),
+            "rows": int(count),
+            "rebuilt": False,
+            "files_reindexed": len(changed) + len(removed),
+            "rows_added": added,
+            "rows_removed": dropped,
+            "elapsed_seconds": round(elapsed, 1),
+            "message": (
+                f"Updated the full-text index from {len(changed) + len(removed)} "
+                f"changed metadata files in {elapsed:.1f}s."
+            ),
+        }
+
+    def _reindex_sources(
+        self, out: sqlite3.Connection, changed: List[str], removed: List[str]
+    ) -> Tuple[int, int]:
+        """Drop rows from changed/removed files, then load changed files anew."""
+        dropped = 0
+        for source in changed + removed:
+            # An external-content index must be told the old values to unindex.
+            out.execute(
+                "INSERT INTO corpus_fts(corpus_fts, rowid, title, description, "
+                "court_code) SELECT 'delete', id, title, description, "
+                "court_code FROM corpus WHERE _source = ?",
+                (source,),
+            )
+            dropped += out.execute(
+                "DELETE FROM corpus WHERE _source = ?", (source,)
+            ).rowcount
+        if not changed:
+            return dropped, 0
+
+        sql, _globs = self._search_sql("all")
+        first_new = (
+            out.execute("SELECT coalesce(max(id), 0) FROM corpus").fetchone()[0] + 1
+        )
+        added = 0
+        scan = self._scan()
+        try:
+            # DuckDB prunes files on the filename filter, so only the changed
+            # Parquet files are read.
+            cursor = scan.execute(
+                f"SELECT * FROM ({sql}) WHERE _source IN "
+                f"({', '.join('?' * len(changed))})",
+                changed,
+            )
+            columns = [d[0] for d in cursor.description]
+            insert = (
+                f"INSERT INTO corpus ({', '.join(columns)}) "
+                f"VALUES ({', '.join('?' * len(columns))})"
+            )
+            while batch := cursor.fetchmany(50_000):
+                out.executemany(insert, batch)
+                added += len(batch)
+        finally:
+            scan.close()
+        out.execute(
+            "INSERT INTO corpus_fts(rowid, title, description, court_code) "
+            "SELECT id, title, description, court_code FROM corpus WHERE id >= ?",
+            (first_new,),
+        )
+        return dropped, added
 
     @staticmethod
     def _discard_build(building: Path) -> None:
@@ -1017,8 +1178,9 @@ class OpenJudgmentsClient:
                     )                          AS decision_date,
                     path                       AS locator,
                     'od'                       AS src,
-                    NULL                       AS source_url
-                FROM read_parquet('{_sql_quote(self._sc_glob())}', hive_partitioning = true, union_by_name = true)
+                    NULL                       AS source_url,
+                    filename                   AS _source
+                FROM read_parquet('{_sql_quote(self._sc_glob())}', hive_partitioning = true, union_by_name = true, filename = true)
                 """
             )
 
@@ -1045,8 +1207,9 @@ class OpenJudgmentsClient:
                     CAST(decision_date AS VARCHAR) AS decision_date,
                     pdf_link                   AS locator,
                     'od'                       AS src,
-                    NULL                       AS source_url
-                FROM read_parquet('{_sql_quote(self._hc_glob())}', hive_partitioning = true, union_by_name = true)
+                    NULL                       AS source_url,
+                    filename                   AS _source
+                FROM read_parquet('{_sql_quote(self._hc_glob())}', hive_partitioning = true, union_by_name = true, filename = true)
                 {court_filter}
                 """
             )
@@ -1076,8 +1239,9 @@ class OpenJudgmentsClient:
                     CAST(decision_date AS VARCHAR) AS decision_date,
                     pdf_link                   AS locator,
                     'hist'                     AS src,
-                    source_url
-                FROM read_parquet('{_sql_quote(self._historical_glob())}', union_by_name = true)
+                    source_url,
+                    filename                   AS _source
+                FROM read_parquet('{_sql_quote(self._historical_glob())}', union_by_name = true, filename = true)
                 {hist_filter}
                 """
             )
@@ -1107,8 +1271,9 @@ class OpenJudgmentsClient:
                     CAST(decision_date AS VARCHAR) AS decision_date,
                     pdf_link                   AS locator,
                     'recent'                   AS src,
-                    source_url
-                FROM read_parquet('{_sql_quote(self._recent_glob())}', union_by_name = true)
+                    source_url,
+                    filename                   AS _source
+                FROM read_parquet('{_sql_quote(self._recent_glob())}', union_by_name = true, filename = true)
                 {recent_filter}
                 """
             )

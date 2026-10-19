@@ -61,13 +61,13 @@ class TestFtsRebuild:
         client.build_fts_index.assert_not_called()
 
     def test_rebuilds_when_stale_and_reports_timing(self):
-        """A stale index triggers a forced rebuild with rows and duration."""
+        """A stale index triggers an incremental update with rows and duration."""
         daily_sync = _load_daily_sync()
         p_backend, p_client, client = _patch_sources(fresh=False)
         with p_backend, p_client:
             result = daily_sync._fts_rebuild()
 
-        client.build_fts_index.assert_called_once_with(force=True)
+        client.build_fts_index.assert_called_once_with()
         assert result["status"] == "ok"
         assert result["rebuilt"] is True
         assert result["rows"] == 1234

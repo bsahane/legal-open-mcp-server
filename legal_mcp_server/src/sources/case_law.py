@@ -71,6 +71,20 @@ def reset_backend() -> None:
     _runtime_backend = None
 
 
+def corpus_version() -> str:
+    """Token that changes whenever local search results could change.
+
+    Only the open-data backend has a local corpus; remote backends return an
+    empty token and rely on the cache TTL alone.
+    """
+    if active_backend() != "open_data":
+        return ""
+    try:
+        return open_judgments.get_client().corpus_version()
+    except Exception:  # noqa: BLE001 - a missing corpus just means no token
+        return ""
+
+
 def _require_enabled() -> str:
     """Return the active backend, or raise if case law is disabled."""
     backend = active_backend()

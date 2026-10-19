@@ -319,6 +319,29 @@ class TestResearchTools:
     """Tool-level contract: shape, honesty, and no silent gaps."""
 
     @pytest.mark.asyncio
+    async def test_search_tool_cache_misses_after_a_sync(self, corpus, tmp_path):
+        """A sync adds judgments; the cached pre-sync answer must not win."""
+        from legal_mcp_server.src import cache as cache_mod
+
+        with patch.object(
+            open_judgments.settings, "LEGAL_DATA_PATH", str(tmp_path / "cache")
+        ):
+            cache_mod._get_cache.cache_clear()
+            try:
+                first = await research_tools.search_case_law("Zebra")
+                zebra = dict(SC_ROWS[0], title="ZEBRA versus STATE", path="z_9")
+                _write_parquet(
+                    [zebra], corpus.sc_metadata_dir / "year=2025" / "metadata.parquet"
+                )
+                second = await research_tools.search_case_law("Zebra")
+            finally:
+                cache_mod._get_cache.cache_clear()
+
+        assert first["result_count"] == 0
+        assert second["cached"] is False
+        assert second["result_count"] == 1
+
+    @pytest.mark.asyncio
     async def test_search_tool_returns_results_and_cost(self, corpus):
         result = await research_tools.search_case_law("Vijay Singh")
         assert result["status"] == "success"
@@ -694,6 +717,79 @@ class TestFullTextIndex:
         with patch.object(corpus, "_connect", wraps=corpus._connect) as like_conn:
             await corpus.search("&")
         like_conn.assert_called()
+
+    @pytest.mark.asyncio
+    async def test_update_reindexes_only_new_file_in_place(self, corpus):
+        """A synced file is indexed in place; a held reader sees it."""
+        self._build(corpus)
+        assert await corpus.search("Zebra") == []  # opens the cached reader
+        inode = corpus._fts_path().stat().st_ino
+        zebra = dict(SC_ROWS[0], title="ZEBRA CROSSING versus STATE", path="z_1")
+        _write_parquet(
+            [zebra], corpus.sc_metadata_dir / "year=2025" / "metadata.parquet"
+        )
+        assert corpus._fts_available() is False
+
+        result = corpus.build_fts_index()
+
+        assert result["rebuilt"] is False
+        assert result["files_reindexed"] == 1
+        assert result["rows_added"] == 1
+        assert result["rows"] == 4
+        assert corpus._fts_path().stat().st_ino == inode  # no side-file swap
+        assert corpus._fts_available() is True
+        with patch.object(corpus, "_connect", side_effect=AssertionError("LIKE")):
+            hits = await corpus.search("Zebra")
+        assert [h.doc_id for h in hits] == ["sc:2025:z_1"]
+
+    @pytest.mark.asyncio
+    async def test_update_replaces_changed_and_drops_removed_files(self, corpus):
+        """A rewritten file swaps its rows; a deleted file's rows disappear."""
+        self._build(corpus)
+        sc_file = corpus.sc_metadata_dir / "year=2024" / "metadata.parquet"
+        _write_parquet([dict(SC_ROWS[0], title="QUOKKA versus STATE")], sc_file)
+        hc_file = next(corpus.hc_metadata_dir.rglob("metadata.parquet"))
+        hc_file.unlink()
+
+        result = corpus.build_fts_index()
+
+        assert result["files_reindexed"] == 2
+        assert result["rows_removed"] == 3  # 2 SC + 1 HC
+        assert result["rows"] == 1
+        with patch.object(corpus, "_connect", side_effect=AssertionError("LIKE")):
+            assert [h.title for h in await corpus.search("Quokka")] == [
+                "QUOKKA versus STATE"
+            ]
+            assert await corpus.search("Vijay") == []
+            assert await corpus.search("Pereira") == []
+
+    def test_index_without_file_tracking_gets_full_build(self, corpus):
+        """An index from before per-file tracking cannot be patched."""
+        import sqlite3
+
+        self._build(corpus)
+        con = sqlite3.connect(corpus._fts_path())
+        con.execute("DROP TABLE fts_sources")
+        con.commit()
+        con.close()
+
+        result = corpus.build_fts_index()
+
+        assert result["rebuilt"] is True
+        assert result["rows"] == 3
+
+    def test_corpus_version_tracks_index_and_metadata(self, corpus):
+        """The search-cache token moves on a sync and on an index update."""
+        before = corpus.corpus_version()
+        self._build(corpus)
+        built = corpus.corpus_version()
+        _write_parquet(
+            SC_ROWS, corpus.sc_metadata_dir / "year=2025" / "metadata.parquet"
+        )
+        synced = corpus.corpus_version()
+        corpus.build_fts_index()
+        updated = corpus.corpus_version()
+        assert len({before, built, synced, updated}) == 4
 
     def test_stale_after_newer_metadata(self, corpus):
         self._build(corpus)

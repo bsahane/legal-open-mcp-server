@@ -44,6 +44,13 @@ class TestRoundTrip:
         assert await cache.get_cached("q", court="Bombay") == {"n": 2}
 
     @pytest.mark.asyncio
+    async def test_corpus_version_separates_entries(self, cache_root):
+        """An answer cached against one corpus is not served for the next."""
+        await cache.set_cached({"n": 1}, query="q", version="1:1")
+        assert await cache.get_cached("q", version="1:1") == {"n": 1}
+        assert await cache.get_cached("q", version="2:1") is None
+
+    @pytest.mark.asyncio
     async def test_miss_returns_none(self, cache_root):
         """An unknown key yields None, not an exception."""
         assert await cache.get_cached("never stored") is None
