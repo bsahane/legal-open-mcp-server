@@ -32,7 +32,7 @@ def _patch_sources(backend="open_data", fresh=False, summary=None, boom=None):
         client.build_fts_index.return_value = summary or {
             "status": "success",
             "rows": 1234,
-            "path": "/data/fts/corpus.duckdb",
+            "path": "/data/fts/corpus.sqlite",
             "rebuilt": True,
         }
     return (

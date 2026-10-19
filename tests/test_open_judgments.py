@@ -574,7 +574,7 @@ class TestFullTextIndex:
         try:
             return corpus.build_fts_index()
         except Exception as exc:  # noqa: BLE001 - extension may be unavailable
-            pytest.skip(f"DuckDB FTS extension not usable here: {exc}")
+            pytest.skip(f"SQLite FTS5 not usable here: {exc}")
 
     def test_fts_unavailable_before_build(self, corpus):
         assert corpus._fts_available() is False
@@ -605,7 +605,7 @@ class TestFullTextIndex:
         try:
             second = corpus.build_fts_index(force=True)
         except Exception as exc:  # noqa: BLE001 - extension may be unavailable
-            pytest.skip(f"DuckDB FTS extension not usable here: {exc}")
+            pytest.skip(f"SQLite FTS5 not usable here: {exc}")
 
         assert second["status"] == "success"
         assert second["rebuilt"] is True
@@ -614,39 +614,39 @@ class TestFullTextIndex:
         assert corpus._fts_available() is True
 
     def test_rebuild_while_reader_holds_live_file(self, corpus):
-        """A held read-only handle must not block a rebuild.
+        """A held reader must not block a rebuild, and must see the new index.
 
-        Regression: the nightly cron rebuilt in place and hit DuckDB's lock
-        held by the running server. The rebuild now writes a side file and
-        swaps it in; readers reopen on the new inode.
+        Regression: the nightly cron rebuilt in place and hit the lock held by
+        the running server. The rebuild now writes a side file and swaps it
+        in; readers reopen on the new inode.
         """
-        import duckdb
+        import sqlite3
 
         self._build(corpus)
         old_reader = corpus._connect_fts()
-        outside = duckdb.connect(str(corpus._fts_path()), read_only=True)
+        outside = sqlite3.connect(f"file:{corpus._fts_path()}?mode=ro", uri=True)
+        outside.execute("SELECT count(*) FROM corpus").fetchone()
         try:
             result = corpus.build_fts_index(force=True)
         finally:
             outside.close()
 
         assert result["rebuilt"] is True
-        assert not corpus._fts_path().with_name("corpus.duckdb.building").exists()
+        assert not corpus._fts_path().with_name("corpus.sqlite.building").exists()
         reader = corpus._connect_fts()
         assert reader is not old_reader
         hits = reader.execute(
-            "SELECT count(*) FROM corpus "
-            "WHERE fts_main_corpus.match_bm25(id, 'cheque') IS NOT NULL"
+            "SELECT count(*) FROM corpus_fts WHERE corpus_fts MATCH 'bihar'"
         ).fetchone()
-        assert hits is not None
+        assert hits[0] >= 1
 
     def test_build_uses_temp_dir_and_clears_crash_leftovers(self, corpus, tmp_path):
-        """A crashed build's WAL and spill dir must not survive the next build."""
+        """A crashed build's journal and spill dir must not survive a rebuild."""
         live = corpus._fts_path()
         live.parent.mkdir(parents=True, exist_ok=True)
-        wal = live.with_name("corpus.duckdb.building.wal")
-        spill = live.with_name("corpus.duckdb.building.tmp")
-        wal.write_bytes(b"stale")
+        journal = live.with_name("corpus.sqlite.building-journal")
+        spill = live.with_name("corpus.sqlite.building.tmp")
+        journal.write_bytes(b"stale")
         spill.mkdir()
         scratch = tmp_path / "scratch"
 
@@ -655,23 +655,34 @@ class TestFullTextIndex:
 
         assert result["rebuilt"] is True
         assert scratch.is_dir()
-        assert not wal.exists()
+        assert not journal.exists()
         assert not spill.exists()
 
-    def test_search_connection_is_memory_capped(self, corpus):
-        """An uncapped reader sized itself from host RAM and hung the LXC."""
+    @pytest.mark.asyncio
+    async def test_fts_court_filter_matches_like(self, corpus):
+        """Court narrowing happens inside FTS5 and agrees with the LIKE path."""
+        like = await corpus.search("State", court="Supreme Court")
         self._build(corpus)
-        corpus._close_duckdb_handles()
-        with patch.object(
-            open_judgments.OpenJudgmentsClient,
-            "_container_memory_bytes",
-            return_value=4 << 30,
-        ):
-            conn = corpus._connect_fts()
-        limit = conn.execute("SELECT current_setting('memory_limit')").fetchone()[0]
-        threads = conn.execute("SELECT current_setting('threads')").fetchone()[0]
-        assert limit == "1.0 GiB", limit
-        assert int(threads) == 2
+        fts = await corpus.search("State", court="Supreme Court")
+        assert {h.doc_id for h in fts} == {h.doc_id for h in like}
+        assert fts and all(h.court == "Supreme Court of India" for h in fts)
+
+    @pytest.mark.asyncio
+    async def test_fts_prefix_term_matches_like(self, corpus):
+        """A word fragment finds what the LIKE substring test finds."""
+        like = await corpus.search("Bih")
+        self._build(corpus)
+        fts = await corpus.search("Bih")
+        assert like
+        assert {h.doc_id for h in fts} == {h.doc_id for h in like}
+
+    @pytest.mark.asyncio
+    async def test_unindexable_query_falls_back_to_like(self, corpus):
+        """Pure punctuation has no FTS5 tokens; the LIKE path answers instead."""
+        self._build(corpus)
+        with patch.object(corpus, "_connect", wraps=corpus._connect) as like_conn:
+            await corpus.search("&")
+        like_conn.assert_called()
 
     def test_stale_after_newer_metadata(self, corpus):
         self._build(corpus)
@@ -761,7 +772,7 @@ class TestPagination:
         try:
             build = paged_corpus.build_fts_index(force=True)
         except Exception as exc:  # noqa: BLE001 - extension may be unavailable
-            pytest.skip(f"DuckDB FTS extension not usable here: {exc}")
+            pytest.skip(f"SQLite FTS5 not usable here: {exc}")
         assert build["status"] == "success"
 
         pages = [

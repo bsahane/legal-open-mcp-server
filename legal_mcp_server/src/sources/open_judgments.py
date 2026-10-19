@@ -30,6 +30,7 @@ import asyncio
 import os
 import re
 import shutil
+import sqlite3
 import threading
 import time
 from dataclasses import dataclass, field
@@ -661,8 +662,8 @@ class OpenJudgmentsClient:
     # Full-text search index
     # ------------------------------------------------------------------
     def _fts_path(self) -> Path:
-        """Persistent DuckDB file holding the FTS corpus table + index."""
-        return self.root / "fts" / "corpus.duckdb"
+        """Persistent SQLite file holding the corpus table + FTS5 index."""
+        return self.root / "fts" / "corpus.sqlite"
 
     def _fts_available(self) -> bool:
         """Whether a fresh FTS index exists for the synced corpus.
@@ -705,29 +706,17 @@ class OpenJudgmentsClient:
                     pass
                 with self._conns_lock:
                     self._conns.discard(entry[1])
-            try:
-                import duckdb
-            except ImportError as exc:  # pragma: no cover - dependency declared
-                raise SourceUnavailable(
-                    "duckdb is required for open-data case law."
-                ) from exc
-            conn = duckdb.connect(str(self._fts_path()), read_only=True)
-            # The `fts` extension registry is process-local: a fresh process
-            # does not inherit LOAD fts from the process that built the index,
-            # so every read connection must load it itself.
-            conn.execute("LOAD fts")
-            # Uncapped, DuckDB sizes its buffer pool from host RAM; one BM25
-            # query over a 6 GB index then drove a 4 GB container into swap
-            # until it hung. A quarter of the container keeps the server alive
-            # and measured no slower than 2 GB (scoring is CPU-bound).
-            # ponytail: match_bm25 scores every row (~10s at 16M rows); query
-            # the fts_main_corpus term tables directly if that gets too slow.
-            total = self._container_memory_bytes()
-            if total:
-                conn.execute(
-                    f"SET memory_limit='{max(total // 4, 256 << 20) >> 20}MiB'"
-                )
-                conn.execute("SET threads=2")
+            # immutable=1: the file is only ever replaced whole (os.replace),
+            # never written in place, so SQLite can skip locking entirely and
+            # a rebuild never waits on readers. check_same_thread=False lets
+            # _close_duckdb_handles close it from whichever thread shuts down;
+            # the per-thread cache still keeps one connection per thread.
+            conn = sqlite3.connect(
+                f"file:{self._fts_path()}?mode=ro&immutable=1",
+                uri=True,
+                check_same_thread=False,
+            )
+            conn.execute("PRAGMA cache_size=-65536")  # 64 MiB page cache
             with self._conns_lock:
                 self._conns.add(conn)
             self._local.fts_conn = (self._generation, conn, inode)
@@ -737,9 +726,11 @@ class OpenJudgmentsClient:
     def build_fts_index(self, force: bool = False) -> Dict[str, Any]:
         """Build the FTS index over synced metadata into a persistent file.
 
-        The search tool transparently uses this index for BM25-ranked full-text
-        search when it is present and fresh, falling back to the LIKE-based
-        scan otherwise. Rebuild after every sync that changes the corpus.
+        DuckDB scans the Parquet metadata and streams it into a SQLite file
+        with an FTS5 index over title and description. The search tool uses
+        it for BM25-ranked search when it is present and fresh, falling back
+        to the LIKE-based scan otherwise. Rebuild after every sync that
+        changes the corpus.
 
         Args:
             force: Rebuild even when the index already looks fresh.
@@ -771,81 +762,74 @@ class OpenJudgmentsClient:
                 "duckdb is required to build the open-data case-law index."
             ) from exc
 
-        # `fts` ships with DuckDB but must be fetched once on first use.
-        probe = duckdb.connect()
-        try:
-            probe.execute("INSTALL fts")
-        except Exception:  # noqa: BLE001 - already present on later installs
-            logger.debug("DuckDB FTS extension already installed")
-        probe.close()
-
-        # Build into a side file and swap it in at the end. Opening the live
-        # file read-write fails while any process (the running server, when
-        # the nightly cron rebuilds) holds a read-only handle on it, and a
-        # build that dies midway would otherwise leave a corpus table with no
-        # BM25 index that still looks fresh to _fts_available.
+        # Build into a side file and swap it in at the end, so readers (the
+        # running server, when the nightly cron rebuilds) never see a
+        # half-built index, and a crash leaves the previous one in service.
         building = path.with_name(path.name + ".building")
         self._discard_build(building)
-        con = duckdb.connect(str(building))
+        scan = duckdb.connect()
+        out = sqlite3.connect(str(building))
         started = time.monotonic()
+        count = 0
         try:
-            # Large builds (multi-million rows) spill aggressively; keep the
-            # memory footprint bounded so containerised builds are not OOM
-            # killed mid-write, and disable insertion-order preservation so
-            # the corpus table streams straight to disk.
-            self._apply_duckdb_resource_guards(con)
-            # Indexing 16M rows spills well over 20 GB; let that scratch live
-            # on a bigger, cheaper disk than the finished index.
+            # Bound the Parquet scan's memory so containerised builds are not
+            # OOM killed, and let any spill land on the scratch disk.
+            self._apply_duckdb_resource_guards(scan)
             if settings.FTS_BUILD_TEMP_DIR:
                 Path(settings.FTS_BUILD_TEMP_DIR).mkdir(parents=True, exist_ok=True)
-                con.execute(
+                scan.execute(
                     f"SET temp_directory='{_sql_quote(settings.FTS_BUILD_TEMP_DIR)}'"
                 )
-            con.execute("LOAD fts")
-            logger.info("FTS build: dropping stale tables (if any)")
-            # A previous index leaves catalog metadata behind even once its
-            # backing tables are gone, and create_fts_index refuses to run
-            # over it - remove it explicitly before anything else.
-            try:
-                con.execute("PRAGMA drop_fts_index('corpus')")
-            except Exception as exc:  # noqa: BLE001 - none exists on first build
-                logger.debug(f"No stale FTS index to drop: {exc}")
-            # Drop leftovers from a previous build so the rebuild is clean.
-            for name in (
-                "corpus",
-                "fts_main_corpus",
-                "fts_main_corpus_data",
-                "fts_main_corpus_docid",
-                "fts_main_corpus_docs",
-                "fts_main_corpus_terms",
-            ):
-                con.execute(f"DROP TABLE IF EXISTS {name}")
-            logger.info("FTS build: scanning metadata Parquet into corpus table")
-            con.execute(
-                f"CREATE TABLE corpus AS "
-                f"SELECT row_number() OVER () AS id, * FROM ({sql})"
+            # The side file is discarded on any failure, so durability buys
+            # nothing here: skip the journal and fsyncs.
+            out.execute("PRAGMA journal_mode=OFF")
+            out.execute("PRAGMA synchronous=OFF")
+            out.execute("PRAGMA cache_size=-262144")  # 256 MiB
+            cursor = scan.execute(f"SELECT * FROM ({sql})")
+            columns = [d[0] for d in cursor.description]
+            out.execute(
+                "CREATE TABLE corpus (id INTEGER PRIMARY KEY, "
+                + ", ".join(columns)
+                + ")"
             )
-            count_row = con.execute("SELECT COUNT(*) FROM corpus").fetchone()
-            if count_row is None:
-                count_row = (0,)
-            count = int(count_row[0])
+            insert = (
+                f"INSERT INTO corpus ({', '.join(columns)}) "
+                f"VALUES ({', '.join('?' * len(columns))})"
+            )
+            logger.info("FTS build: streaming metadata Parquet into SQLite")
+            while batch := cursor.fetchmany(50_000):
+                out.executemany(insert, batch)
+                count += len(batch)
+            out.commit()
             logger.info(
                 f"FTS build: corpus table ready with {count} rows "
                 f"in {time.monotonic() - started:.1f}s"
             )
-            con.execute(
-                "PRAGMA create_fts_index"
-                "('corpus', 'id', 'title', 'description', 'judge')"
+            # External-content index: the text lives once, in `corpus`.
+            # court_code is indexed so a court filter narrows inside FTS5
+            # instead of re-reading every matching row. No stemming: search
+            # terms are prefix-matched, which mirrors the LIKE path's
+            # substring semantics far better than stemmed tokens do.
+            out.execute(
+                "CREATE VIRTUAL TABLE corpus_fts USING fts5("
+                "title, description, court_code, "
+                "content='corpus', content_rowid='id', "
+                "tokenize='unicode61 remove_diacritics 2')"
             )
+            out.execute("INSERT INTO corpus_fts(corpus_fts) VALUES('rebuild')")
+            out.execute("INSERT INTO corpus_fts(corpus_fts) VALUES('optimize')")
+            out.commit()
             logger.info(
-                f"FTS build: BM25 index created in "
-                f"{time.monotonic() - started:.1f}s total; committing"
+                f"FTS build: FTS5 index created in "
+                f"{time.monotonic() - started:.1f}s total"
             )
         except BaseException:
-            con.close()
+            scan.close()
+            out.close()
             self._discard_build(building)
             raise
-        con.close()
+        scan.close()
+        out.close()
         os.replace(building, path)
 
         elapsed = time.monotonic() - started
@@ -867,9 +851,10 @@ class OpenJudgmentsClient:
 
     @staticmethod
     def _discard_build(building: Path) -> None:
-        """Remove a side-file build with its WAL and default spill directory."""
+        """Remove a side-file build and anything a crashed build left beside it."""
         building.unlink(missing_ok=True)
-        building.with_name(building.name + ".wal").unlink(missing_ok=True)
+        for suffix in ("-journal", "-wal", "-shm", ".wal"):
+            building.with_name(building.name + suffix).unlink(missing_ok=True)
         shutil.rmtree(building.with_name(building.name + ".tmp"), ignore_errors=True)
 
     @staticmethod
@@ -1221,9 +1206,11 @@ class OpenJudgmentsClient:
 
         if self._fts_available():
             try:
-                return await self._search_fts(
+                hits = await self._search_fts(
                     scope, query, court, from_date, to_date, judge, limit, offset
                 )
+                if hits is not None:
+                    return hits
             except Exception as exc:  # noqa: BLE001 - fall back to LIKE
                 logger.warning("FTS search failed, falling back to LIKE scan: %s", exc)
 
@@ -1278,68 +1265,67 @@ class OpenJudgmentsClient:
         judge: Optional[str],
         limit: int,
         offset: int = 0,
-    ) -> List[SearchResult]:
-        """BM25-ranked search over the built FTS index.
+    ) -> Optional[List[SearchResult]]:
+        """BM25-ranked search over the built FTS5 index.
 
-        The FTS index narrows the candidate set; the same term-level AND
-        filters as the LIKE path are re-applied so the two paths agree on what
-        matches, differing only in ranking.
+        Each plain alphanumeric term is an FTS5 prefix match restricted to title
+        and description, which is a subset of the LIKE path's ``%term%`` test,
+        so no per-row re-filter is needed. Terms with punctuation tokenize
+        differently from a substring test, so those alone are re-checked with
+        LIKE. Returns ``None`` when nothing in the query is indexable; the
+        caller then falls back to the LIKE scan.
         """
         conditions: List[str] = []
         params: List[Any] = []
+        phrases: List[str] = []
 
-        terms = [t for t in re.split(r"\s+", query.strip()) if t]
-        if terms:
-            for term in terms:
-                conditions.append("(lower(title) LIKE ? OR lower(description) LIKE ?)")
+        for term in [t for t in re.split(r"\s+", query.strip()) if t]:
+            if not re.fullmatch(r"\w+", term):
+                conditions.append(
+                    "(lower(c.title) LIKE ? OR lower(c.description) LIKE ?)"
+                )
                 like = f"%{term.lower()}%"
                 params.extend([like, like])
-            fts_query = " ".join(terms)
-        else:
-            fts_query = query
+            if re.search(r"\w", term):
+                quoted = '"' + term.replace('"', '""') + '"'
+                # Very short prefixes expand to huge token sets ("of"* hits
+                # office, officer, ...); match those as whole tokens.
+                phrases.append(quoted + ("*" if len(term) >= 3 else ""))
+        if not phrases:
+            return None
 
+        match = "{title description} : (" + " AND ".join(phrases) + ")"
         if scope != "all":
-            conditions.append("court_code = ?")
-            params.append(scope)
+            court_tokens = " ".join(re.findall(r"[A-Za-z0-9]+", scope))
+            match += f' AND court_code : "{court_tokens}"'
         if judge:
-            conditions.append("lower(judge) LIKE ?")
+            conditions.append("lower(c.judge) LIKE ?")
             params.append(f"%{judge.lower()}%")
         if from_date:
-            conditions.append("try_cast(decision_date AS DATE) >= try_cast(? AS DATE)")
+            conditions.append("date(c.decision_date) >= date(?)")
             params.append(from_date)
         if to_date:
-            conditions.append("try_cast(decision_date AS DATE) <= try_cast(? AS DATE)")
+            conditions.append("date(c.decision_date) <= date(?)")
             params.append(to_date)
 
-        # Score once, over ids only, then filter the matches: scoring inside
-        # WHERE and again in SELECT ran match_bm25 twice per row across the
-        # whole corpus and evaluated the LIKE filters on every row.
-        where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+        extra = "".join(f" AND {cond}" for cond in conditions)
         full_sql = f"""
-            WITH scored AS (
-                SELECT id, _score FROM (
-                    SELECT id, fts_main_corpus.match_bm25(id, ?) AS _score
-                    FROM corpus
-                ) WHERE _score IS NOT NULL
-            )
-            SELECT c.*, s._score
-            FROM scored s JOIN corpus c ON c.id = s.id
-            {where}
-            ORDER BY s._score DESC NULLS LAST,
-                     try_cast(c.decision_date AS DATE) DESC NULLS LAST
+            SELECT c.*
+            FROM corpus_fts JOIN corpus c ON c.id = corpus_fts.rowid
+            WHERE corpus_fts MATCH ?{extra}
+            ORDER BY bm25(corpus_fts, 1.0, 1.0, 0.0),
+                     date(c.decision_date) DESC NULLS LAST,
+                     c.id
             LIMIT ?
             OFFSET ?
         """
-        params = [fts_query, *params, limit, offset]
+        params = [match, *params, limit, offset]
 
         def _run() -> List[Dict[str, Any]]:
             con = self._connect_fts()
             cursor = con.execute(full_sql, params)
             columns = [d[0] for d in cursor.description]
-            rows = [dict(zip(columns, row)) for row in cursor.fetchall()]
-            for row in rows:
-                row.pop("_score", None)
-            return rows
+            return [dict(zip(columns, row)) for row in cursor.fetchall()]
 
         rows = await asyncio.to_thread(_run)
         return [self._row_to_result(row) for row in rows]

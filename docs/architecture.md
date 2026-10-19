@@ -248,7 +248,7 @@ legal-mcp-server/
 - **`settings.py`**: Environment-based configuration using Pydantic BaseSettings with validation
 - **`tools/`**: The seven legal MCP tool groups (research, statutes, deadlines, court, drafting, documents, matters) — see [Tools Reference](tools.md)
 - **`domain/`**: Offline legal logic — citation parsing, limitation periods, court holidays, criminal-code mapping
-- **`sources/`**: Data backends — open-data judgment corpus (Parquet + DuckDB FTS), Indian Kanoon API, India Code, eCourts, embeddings
+- **`sources/`**: Data backends — open-data judgment corpus (Parquet + DuckDB scans, SQLite FTS5 index), Indian Kanoon API, India Code, eCourts, embeddings
 - **`cache.py`**: Disk-backed 24-hour cache for case-law searches and citation verifications
 - **`oauth/`**: OAuth 2.0 integration — controller, handler, models, routes, service (see [Authentication Guide](authentication.md))
 - **`storage/storage_service.py`**: PostgreSQL-backed `StorageService` for persistent token and client storage. Used by the OAuth layer to store authorization codes, access tokens, refresh tokens, and registered clients. Requires PostgreSQL when auth is enabled; initialized at server startup via `oauth/service.py`

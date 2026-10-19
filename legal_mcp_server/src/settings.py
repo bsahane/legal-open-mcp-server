@@ -361,9 +361,8 @@ class Settings(BaseSettings):
         json_schema_extra={
             "env": "FTS_BUILD_TEMP_DIR",
             "description": (
-                "Scratch directory for DuckDB spill while building the FTS "
-                "index. A full-corpus build spills tens of GB; unset keeps it "
-                "beside the index file."
+                "Scratch directory for DuckDB spill while scanning Parquet "
+                "into the FTS index. Unset uses DuckDB's default."
             ),
             "example": "/mnt/scratch/duckdb",
         },

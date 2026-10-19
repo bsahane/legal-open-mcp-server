@@ -144,7 +144,7 @@ def _fts_rebuild() -> dict:
     """Rebuild the BM25 FTS index over the freshly synced corpus.
 
     Search silently falls back to a slower LIKE scan whenever any synced
-    metadata parquet is newer than ``data/case_law/fts/corpus.duckdb``, so
+    metadata parquet is newer than ``data/case_law/fts/corpus.sqlite``, so
     the nightly job must refresh the index or every search the next day
     pays the fallback cost until someone runs ``make fts`` by hand. Runs
     after all judgment sources (open data + archives) are final so a single

@@ -6,6 +6,16 @@ This project uses [GitHub Releases](https://github.com/redhat-data-and-ai/legal-
 
 ## [Unreleased]
 
+### Changed
+
+- Case-law full-text search now uses a SQLite FTS5 index
+  (`data/case_law/fts/corpus.sqlite`) instead of DuckDB's `fts` extension.
+  DuckDB's `match_bm25` scored every row of the 16M-row corpus on every query
+  (20-50s on a 2-core host); FTS5 answers from its inverted index. Search
+  terms are prefix matches over title and description, and the court filter
+  is matched inside the index. Rebuild with `make fts`; the old
+  `corpus.duckdb` file is no longer read and can be deleted.
+
 ### Fixed
 
 - Root-cause fixed: `_configure_third_party_loggers` cleared **all** root
@@ -20,8 +30,8 @@ This project uses [GitHub Releases](https://github.com/redhat-data-and-ai/legal-
   systemd's 90s stop timeout, and the lifespan shutdown releases the
   open-data corpus client (DuckDB + HTTP), the Indian Kanoon client and the
   search disk cache deterministically.
-- The FTS build logs its phases (parquet scan, corpus table, BM25 index,
-  commit) and caps DuckDB memory at ~60% of RAM (max 8 GB), so unattended
+- The FTS build logs its phases (parquet scan, corpus table, FTS5 index)
+  and caps the DuckDB Parquet scan's memory at ~60% of RAM (max 8 GB), so unattended
   builds leave a trail instead of dying silently; `build_fts_index.py` now
   flushes output and exits non-zero on failure.
 - The nightly sync reports elapsed time and row counts for the FTS rebuild,
