@@ -15,11 +15,12 @@ for a billed one.
 
 from __future__ import annotations
 
+import asyncio
 import re
 from typing import Any, Dict, List, Optional
 
 from legal_mcp_server.src.settings import settings
-from legal_mcp_server.src.sources import open_judgments
+from legal_mcp_server.src.sources import body_index, open_judgments
 from legal_mcp_server.src.sources.open_judgments import (
     CorpusNotSynced,
     SourceUnavailable,
@@ -85,6 +86,11 @@ def corpus_version() -> str:
         return ""
 
 
+def body_version() -> str:
+    """Token that changes whenever full-text search results could change."""
+    return body_index.version(open_judgments.get_client())
+
+
 def _require_enabled() -> str:
     """Return the active backend, or raise if case law is disabled."""
     backend = active_backend()
@@ -111,6 +117,7 @@ async def search(
     judge: Optional[str] = None,
     limit: int = 20,
     page: int = 0,
+    full_text: bool = False,
 ) -> Dict[str, Any]:
     """Search case law using the configured backend.
 
@@ -122,11 +129,42 @@ async def search(
         judge: Restrict to a judge whose name contains this.
         limit: Maximum results (open-data backend).
         page: Zero-based page into the ranked results (both backends).
+        full_text: Search extracted judgment text instead of metadata
+            (open-data backend, ``CASE_LAW_FULL_TEXT_SEARCH`` enabled).
 
     Returns:
         Dict with ``results``, ``backend``, ``cost`` and backend metadata.
     """
     backend = _require_enabled()
+
+    if full_text:
+        if backend != "open_data" or not settings.CASE_LAW_FULL_TEXT_SEARCH:
+            raise SourceUnavailable(
+                "Full-text search is not enabled on this server "
+                "(CASE_LAW_FULL_TEXT_SEARCH). Search metadata instead: party "
+                "names, case title terms or judge."
+            )
+        open_client = open_judgments.get_client()
+        hits = await body_index.search(
+            open_client, query, court, from_date, to_date, judge, limit, page
+        )
+        covered = await asyncio.to_thread(body_index.covered_courts, open_client)
+        courts = ", ".join(f"{name} ({n:,})" for name, n in covered.items())
+        return {
+            "backend": backend,
+            "cost": _cost_note(backend),
+            "results": hits,
+            "found": len(hits),
+            "query": query,
+            "page": max(0, page),
+            "attribution": open_judgments.ATTRIBUTION,
+            "scope_note": (
+                "Full-text search covers only the judgments whose text has "
+                f"been indexed: {courts or 'none yet'}. No result here is not "
+                "proof that no authority exists in other courts."
+            ),
+            "ordering": "relevance",
+        }
 
     if backend == "open_data":
         open_client = open_judgments.get_client()
@@ -428,6 +466,11 @@ def status() -> Dict[str, Any]:
             "available": report["synced"],
             "cost": _cost_note(backend),
             **report,
+            "full_text_index": (
+                body_index.covered_courts(open_client)
+                if settings.CASE_LAW_FULL_TEXT_SEARCH
+                else "disabled"
+            ),
             "message": (
                 "Free open-data case law is ready."
                 if report["synced"]

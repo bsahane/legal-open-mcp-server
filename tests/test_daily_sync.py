@@ -1,13 +1,13 @@
-"""Tests for the nightly data-sync script's FTS rebuild step.
+"""Tests for the nightly data-sync script's index steps.
 
-The rebuild runs unattended under cron, so its contract is: skip cleanly
+The steps run unattended under cron, so their contract is: skip cleanly
 when the index is fresh, report rows and elapsed time when it rebuilds,
 and fail loudly (with timing) when the build blows up.
 """
 
 import importlib.util
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -95,3 +95,62 @@ class TestFtsRebuild:
 
         assert result["status"] == "skipped"
         client.build_fts_index.assert_not_called()
+
+
+class TestBodyIndex:
+    """The nightly full-text index step."""
+
+    def _run(self, tmp_path, enabled=True, built=True, boom=None, backend="open_data"):
+        daily_sync = _load_daily_sync()
+        from legal_mcp_server.src.settings import settings
+        from legal_mcp_server.src.sources import body_index
+
+        if built:
+            (tmp_path / "fts").mkdir()
+            (tmp_path / "fts" / "body.sqlite").write_bytes(b"x")
+        summary = {
+            "indexed": 5,
+            "without_text": 1,
+            "failed": 0,
+            "total_indexed": 105,
+            "message": "Indexed 5.",
+        }
+        build = AsyncMock(side_effect=boom, return_value=summary)
+        with (
+            patch.object(settings, "CASE_LAW_FULL_TEXT_SEARCH", enabled),
+            patch.object(settings, "CASE_LAW_DATA_PATH", str(tmp_path)),
+            patch(
+                "legal_mcp_server.src.sources.case_law.active_backend",
+                return_value=backend,
+            ),
+            patch.object(body_index, "build", build),
+        ):
+            return daily_sync._body_index(), build
+
+    def test_updates_with_a_nightly_cap(self, tmp_path):
+        result, build = self._run(tmp_path)
+        assert result["status"] == "ok"
+        assert result["indexed"] == 5
+        assert result["total_indexed"] == 105
+        assert build.call_args.kwargs["limit"] == result["limit"]
+
+    def test_skips_when_disabled(self, tmp_path):
+        result, build = self._run(tmp_path, enabled=False)
+        assert result["status"] == "skipped"
+        build.assert_not_called()
+
+    def test_skips_before_the_first_manual_build(self, tmp_path):
+        result, build = self._run(tmp_path, built=False)
+        assert result["status"] == "skipped"
+        assert "make fts-body" in result["reason"]
+        build.assert_not_called()
+
+    def test_skips_for_non_open_data_backend(self, tmp_path):
+        result, build = self._run(tmp_path, backend="disabled")
+        assert result["status"] == "skipped"
+        build.assert_not_called()
+
+    def test_reports_error(self, tmp_path):
+        result, _ = self._run(tmp_path, boom=RuntimeError("disk full"))
+        assert result["status"] == "error"
+        assert result["error"] == "disk full"

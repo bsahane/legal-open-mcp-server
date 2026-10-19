@@ -91,6 +91,13 @@ fts: ## Build the BM25 full-text index over synced case-law metadata
 	fi
 	.venv/bin/python scripts/build_fts_index.py
 
+fts-body: ## Index judgment text (SC + Bombay HC) for full-text search; resumable
+	@if [ ! -d ".venv" ]; then \
+		echo "Error: Virtual environment not found. Run 'make install' first."; \
+		exit 1; \
+	fi
+	.venv/bin/python scripts/build_body_index.py $(ARGS)
+
 local: ## Start MCP server locally
 	@echo "Setting up local environment..."
 	@test -f .env || (echo "Creating .env from .env.example..." && cp .env.example .env)

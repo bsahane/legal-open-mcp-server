@@ -202,6 +202,68 @@ def _fts_rebuild() -> dict:
         }
 
 
+# Judgments whose text one nightly run extracts at most: about ten minutes
+# at the ~40/s measured with downloads, several times the ~1,000 judgments
+# a day Bombay and the Supreme Court publish, so a backlog drains over a few
+# nights instead of one run going on for hours.
+BODY_INDEX_NIGHTLY_LIMIT = 20_000
+
+
+def _body_index() -> dict:
+    """Extract the text of newly synced judgments into the full-text index.
+
+    Runs after ``_fts_rebuild`` because it reads the list of judgments from
+    the metadata index. Skipped while full-text search is switched off, and
+    until the first build, which is a deliberate manual step
+    (``make fts-body``, see docs/full-text-search.md).
+    """
+    started = time.monotonic()
+    try:
+        from legal_mcp_server.src.settings import settings
+        from legal_mcp_server.src.sources import body_index, case_law, open_judgments
+
+        if case_law.active_backend() != "open_data":
+            return {
+                "status": "skipped",
+                "reason": f"backend is '{case_law.active_backend()}'",
+            }
+        if not settings.CASE_LAW_FULL_TEXT_SEARCH:
+            return {"status": "skipped", "reason": "CASE_LAW_FULL_TEXT_SEARCH is off"}
+        # A client of its own: the shared one's HTTP session belongs to the
+        # case-law sync's event loop, closed by now.
+        client = open_judgments.OpenJudgmentsClient()
+        if not body_index.index_path(client).is_file():
+            return {"status": "skipped", "reason": "not built yet (make fts-body)"}
+
+        async def run() -> dict:
+            try:
+                return await body_index.build(client, limit=BODY_INDEX_NIGHTLY_LIMIT)
+            finally:
+                await client.aclose()
+
+        log.info("Extracting new judgment text into the full-text index")
+        summary = asyncio.run(run())
+        log.info(summary["message"])
+        return {
+            "status": "ok",
+            **{
+                k: summary[k]
+                for k in ("indexed", "without_text", "failed", "total_indexed")
+            },
+            "limit": BODY_INDEX_NIGHTLY_LIMIT,
+            "elapsed_seconds": round(time.monotonic() - started, 1),
+        }
+    except Exception as exc:
+        log.exception(
+            "Full-text index update failed after %.1fs", time.monotonic() - started
+        )
+        return {
+            "status": "error",
+            "error": str(exc),
+            "elapsed_seconds": round(time.monotonic() - started, 1),
+        }
+
+
 def main() -> int:
     """Run every sync step and print a JSON report of the outcomes.
 
@@ -215,6 +277,7 @@ def main() -> int:
         "historical": _historical(),
         "recent": _recent(),
         "fts_index": _fts_rebuild(),
+        "body_index": _body_index(),
         "statutes": _statutes(),
     }
     text = json.dumps(report, indent=2, default=str)
