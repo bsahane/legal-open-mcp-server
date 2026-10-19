@@ -658,6 +658,21 @@ class TestFullTextIndex:
         assert not wal.exists()
         assert not spill.exists()
 
+    def test_search_connection_is_memory_capped(self, corpus):
+        """An uncapped reader sized itself from host RAM and hung the LXC."""
+        self._build(corpus)
+        corpus._close_duckdb_handles()
+        with patch.object(
+            open_judgments.OpenJudgmentsClient,
+            "_container_memory_bytes",
+            return_value=4 << 30,
+        ):
+            conn = corpus._connect_fts()
+        limit = conn.execute("SELECT current_setting('memory_limit')").fetchone()[0]
+        threads = conn.execute("SELECT current_setting('threads')").fetchone()[0]
+        assert limit == "1.0 GiB", limit
+        assert int(threads) == 2
+
     def test_stale_after_newer_metadata(self, corpus):
         self._build(corpus)
         assert corpus._fts_available() is True

@@ -716,6 +716,18 @@ class OpenJudgmentsClient:
             # does not inherit LOAD fts from the process that built the index,
             # so every read connection must load it itself.
             conn.execute("LOAD fts")
+            # Uncapped, DuckDB sizes its buffer pool from host RAM; one BM25
+            # query over a 6 GB index then drove a 4 GB container into swap
+            # until it hung. A quarter of the container keeps the server alive
+            # and measured no slower than 2 GB (scoring is CPU-bound).
+            # ponytail: match_bm25 scores every row (~10s at 16M rows); query
+            # the fts_main_corpus term tables directly if that gets too slow.
+            total = self._container_memory_bytes()
+            if total:
+                conn.execute(
+                    f"SET memory_limit='{max(total // 4, 256 << 20) >> 20}MiB'"
+                )
+                conn.execute("SET threads=2")
             with self._conns_lock:
                 self._conns.add(conn)
             self._local.fts_conn = (self._generation, conn, inode)
