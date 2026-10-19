@@ -139,7 +139,7 @@ async def search(
             limit=limit,
             page=max(0, page),
         )
-        return {
+        payload: Dict[str, Any] = {
             "backend": backend,
             "cost": _cost_note(backend),
             "results": [r.to_dict() for r in results],
@@ -152,7 +152,17 @@ async def search(
                 "for the courts and years synced locally, not the full text of "
                 "every judgment. Widen coverage with sync_case_law."
             ),
+            "ordering": "relevance",
         }
+        if getattr(results, "broad", False):
+            payload["ordering"] = "newest_first"
+            payload["notice"] = (
+                f"This query matches more than {open_judgments.FTS_RANK_LIMIT:,} "
+                "judgments, so results are the newest matches rather than the "
+                "most relevant. Add specific terms, a court, a judge or a date "
+                "range to get relevance-ranked results."
+            )
+        return payload
 
     from legal_mcp_server.src.sources import indian_kanoon
 

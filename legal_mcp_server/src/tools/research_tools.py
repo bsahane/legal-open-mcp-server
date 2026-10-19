@@ -93,7 +93,7 @@ async def search_case_law(
     DISPLAY_NAME=Indian Case Law Search
     USECASE=Find Indian judgments on a legal proposition, from the Supreme Court or any High Court, at no cost
     INSTRUCTIONS=1. Check the corpus covers what you need with case_law_status, 2. Search by party name, case title terms or judge - this indexes case metadata, not full judgment text, 3. Open promising results with get_judgment to read the actual reasoning, 4. Never cite a result you have not opened
-    OUTPUT_DESCRIPTION=Dictionary with status, results (doc_id, title, court, date, citation, neutral_citation, judge, disposal, url), the backend used, the page returned, and a scope note stating what was actually searched
+    OUTPUT_DESCRIPTION=Dictionary with status, results (doc_id, title, court, date, citation, neutral_citation, judge, disposal, url), the backend used, the page returned, ordering ("relevance", or "newest_first" with a notice when the query is too broad to rank), and a scope note stating what was actually searched
     EXAMPLES=search_case_law("cheque dishonour", court="Bombay High Court"), search_case_law("Vijay Singh Bihar", court="Supreme Court"), search_case_law("specific performance", page=2)
     PREREQUISITES=Run sync_case_law once for the courts and years you need. No API key and no per-query cost on the default open-data backend.
     RELATED_TOOLS=sync_case_law to widen coverage, get_judgment to read a result, search_within_judgment to locate a passage, verify_citation to confirm a citation
@@ -161,9 +161,11 @@ async def search_case_law(
                 "sufficient basis for a citation."
             ),
         }
-        for key in ("attribution", "scope_note", "spend", "page"):
+        for key in ("attribution", "scope_note", "spend", "page", "ordering", "notice"):
             if key in payload:
                 response[key] = payload[key]
+        if "notice" in payload:
+            response["message"] = f"{payload['notice']} {response['message']}"
         await set_cached(
             response,
             query.strip(),

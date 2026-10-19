@@ -791,6 +791,76 @@ class TestFullTextIndex:
         updated = corpus.corpus_version()
         assert len({before, built, synced, updated}) == 4
 
+    def test_rowids_follow_decision_date_and_sources_are_ids(self, corpus):
+        """Rowid order is date order, which broad queries walk newest first."""
+        import sqlite3
+
+        self._build(corpus)
+        con = sqlite3.connect(corpus._fts_path())
+        dates = [
+            d for (d,) in con.execute("SELECT decision_date FROM corpus ORDER BY id")
+        ]
+        sources = {type(s) for (s,) in con.execute("SELECT _source FROM corpus")}
+        con.close()
+        assert dates == sorted(dates)
+        assert sources == {int}
+
+    @pytest.mark.asyncio
+    async def test_broad_query_lists_newest_first(self, corpus):
+        """Past the rank limit, matches come back by date and are flagged."""
+        self._build(corpus)
+        with (
+            patch.object(open_judgments, "FTS_RANK_LIMIT", 1),
+            patch.object(corpus, "_connect", side_effect=AssertionError("LIKE")),
+        ):
+            hits = await corpus.search("Bihar")
+            page2 = await corpus.search("Bihar", limit=1, page=1)
+        assert hits.broad is True
+        assert [h.date for h in hits] == ["2024-09-25", "2024-05-12"]
+        assert [h.date for h in page2] == ["2024-05-12"]
+
+    @pytest.mark.asyncio
+    async def test_filtered_broad_query_stays_ranked(self, corpus):
+        """A judge or date filter keeps the ranked path, which stays exact."""
+        self._build(corpus)
+        with patch.object(open_judgments, "FTS_RANK_LIMIT", 1):
+            hits = await corpus.search("Bihar", judge="Trivedi")
+        assert hits.broad is False
+        assert [h.judge for h in hits] == ["BELA M. TRIVEDI"]
+
+    @pytest.mark.asyncio
+    async def test_common_word_only_query_uses_fts(self, corpus):
+        """ "state" alone used to fall through to the full LIKE scan."""
+        like = await corpus.search("state")
+        self._build(corpus)
+        with patch.object(corpus, "_connect", side_effect=AssertionError("LIKE")):
+            fts = await corpus.search("state")
+        assert like
+        assert {h.doc_id for h in fts} == {h.doc_id for h in like}
+
+    @pytest.mark.asyncio
+    async def test_search_tool_reports_newest_first_ordering(self, corpus, tmp_path):
+        """The tool tells the caller results are not ranked, and how to narrow."""
+        from legal_mcp_server.src import cache as cache_mod
+
+        self._build(corpus)
+        with (
+            patch.object(
+                open_judgments.settings, "LEGAL_DATA_PATH", str(tmp_path / "cache")
+            ),
+            patch.object(open_judgments, "FTS_RANK_LIMIT", 1),
+        ):
+            cache_mod._get_cache.cache_clear()
+            try:
+                broad = await research_tools.search_case_law("Bihar")
+                narrow = await research_tools.search_case_law("Vijay")
+            finally:
+                cache_mod._get_cache.cache_clear()
+        assert broad["ordering"] == "newest_first"
+        assert "newest matches" in broad["message"]
+        assert narrow["ordering"] == "relevance"
+        assert "notice" not in narrow
+
     def test_stale_after_newer_metadata(self, corpus):
         self._build(corpus)
         assert corpus._fts_available() is True

@@ -257,6 +257,18 @@ def _sql_quote(value: str) -> str:
     return value.replace("'", "''")
 
 
+# Above this many matches a query is listed newest first instead of being
+# BM25-ranked: scoring costs ~3.5us per match, so 100k matches rank in well
+# under a second while the broadest one-word queries match 10M+.
+FTS_RANK_LIMIT = 100_000
+
+
+class SearchResults(list):
+    """Search hits, flagged ``broad`` when listed newest first, not ranked."""
+
+    broad: bool = False
+
+
 # Words so common in case titles ("X v. State of Y") that their FTS5 doclists
 # cover most of the corpus; they are checked with LIKE on narrowed candidates.
 _FTS_STOPWORDS = frozenset(
@@ -799,6 +811,30 @@ class OpenJudgmentsClient:
             )
         return scan
 
+    @staticmethod
+    def _source_table(scan: Any, ids: Dict[str, int]) -> None:
+        """Load a path -> integer id map into DuckDB for the scan to join on.
+
+        Rows store the integer, not the path: 16M copies of a ~90-byte path
+        plus their index cost about 3 GB of the index file.
+        """
+        scan.execute("CREATE TEMP TABLE src (path VARCHAR, id INTEGER)")
+        scan.executemany("INSERT INTO src VALUES (?, ?)", list(ids.items()))
+
+    @staticmethod
+    def _scan_sql(sql: str) -> str:
+        """Scan in decision-date order, tagging each row with its source id.
+
+        Inserting oldest first gives rowids in date order, so FTS5 can list
+        matches newest-first just by walking rowids downwards - the cheap path
+        for queries too broad to rank (see _search_fts).
+        """
+        return (
+            f"SELECT t.* REPLACE (s.id AS _source) FROM ({sql}) t "
+            f"JOIN src s ON s.path = t._source "
+            f"ORDER BY t.decision_date NULLS FIRST"
+        )
+
     def _full_build(self) -> Dict[str, Any]:
         """Build the whole index into a side file and swap it in."""
         sql, _globs = self._search_sql("all")
@@ -811,6 +847,7 @@ class OpenJudgmentsClient:
         # Snapshot before the scan: a file that changes during it is picked
         # up by the next incremental update.
         sources = self._metadata_files()
+        ids = {p: i for i, p in enumerate(sorted(sources), start=1)}
         scan = self._scan()
         out = sqlite3.connect(str(building))
         started = time.monotonic()
@@ -821,7 +858,8 @@ class OpenJudgmentsClient:
             out.execute("PRAGMA journal_mode=OFF")
             out.execute("PRAGMA synchronous=OFF")
             out.execute("PRAGMA cache_size=-262144")  # 256 MiB
-            cursor = scan.execute(f"SELECT * FROM ({sql})")
+            self._source_table(scan, ids)
+            cursor = scan.execute(self._scan_sql(sql))
             columns = [d[0] for d in cursor.description]
             out.execute(
                 "CREATE TABLE corpus (id INTEGER PRIMARY KEY, "
@@ -843,9 +881,13 @@ class OpenJudgmentsClient:
             )
             out.execute("CREATE INDEX corpus_source ON corpus (_source)")
             out.execute(
-                "CREATE TABLE fts_sources (path TEXT PRIMARY KEY, mtime_ns INTEGER)"
+                "CREATE TABLE fts_sources "
+                "(id INTEGER PRIMARY KEY, path TEXT UNIQUE, mtime_ns INTEGER)"
             )
-            out.executemany("INSERT INTO fts_sources VALUES (?, ?)", sources.items())
+            out.executemany(
+                "INSERT INTO fts_sources VALUES (?, ?, ?)",
+                [(i, p, sources[p]) for p, i in ids.items()],
+            )
             # External-content index: the text lives once, in `corpus`.
             # court_code is indexed so a court filter narrows inside FTS5
             # instead of re-reading every matching row. No stemming: search
@@ -897,20 +939,25 @@ class OpenJudgmentsClient:
     def _update_fts_index(self) -> Optional[Dict[str, Any]]:
         """Re-index only changed Parquet files, in place.
 
-        Returns ``None`` when the index predates per-file tracking (or is
-        unreadable), so the caller does a full build instead.
+        Returns ``None`` when the index predates integer per-file tracking (or
+        is unreadable), so the caller does a full build instead.
         """
         path = self._fts_path()
         out = sqlite3.connect(str(path), timeout=300, isolation_level=None)
         try:
             try:
-                recorded = dict(
-                    out.execute("SELECT path, mtime_ns FROM fts_sources").fetchall()
-                )
+                recorded = {
+                    p: (i, m)
+                    for i, p, m in out.execute(
+                        "SELECT id, path, mtime_ns FROM fts_sources"
+                    ).fetchall()
+                }
             except sqlite3.DatabaseError:
                 return None
             current = self._metadata_files()
-            changed = sorted(p for p, m in current.items() if recorded.get(p) != m)
+            changed = sorted(
+                p for p, m in current.items() if recorded.get(p, (0, None))[1] != m
+            )
             removed = sorted(set(recorded) - set(current))
             if not changed and not removed:
                 count = out.execute("SELECT count(*) FROM corpus").fetchone()[0]
@@ -930,14 +977,25 @@ class OpenJudgmentsClient:
             out.execute("PRAGMA cache_spill=OFF")
             out.execute("BEGIN IMMEDIATE")
             try:
-                dropped, added = self._reindex_sources(out, changed, removed)
+                ids = {}
+                for p in changed:
+                    if p in recorded:
+                        ids[p] = recorded[p][0]
+                        out.execute(
+                            "UPDATE fts_sources SET mtime_ns = ? WHERE id = ?",
+                            (current[p], ids[p]),
+                        )
+                    else:
+                        ids[p] = out.execute(
+                            "INSERT INTO fts_sources (path, mtime_ns) VALUES (?, ?)",
+                            (p, current[p]),
+                        ).lastrowid
+                stale = [recorded[p][0] for p in changed if p in recorded]
+                stale += [recorded[p][0] for p in removed]
+                dropped, added = self._reindex_sources(out, stale, ids)
                 out.executemany(
                     "DELETE FROM fts_sources WHERE path = ?",
                     [(p,) for p in removed],
-                )
-                out.executemany(
-                    "INSERT OR REPLACE INTO fts_sources VALUES (?, ?)",
-                    [(p, current[p]) for p in changed],
                 )
                 out.execute("COMMIT")
             except BaseException:
@@ -968,11 +1026,15 @@ class OpenJudgmentsClient:
         }
 
     def _reindex_sources(
-        self, out: sqlite3.Connection, changed: List[str], removed: List[str]
+        self, out: sqlite3.Connection, stale: List[int], ids: Dict[str, int]
     ) -> Tuple[int, int]:
-        """Drop rows from changed/removed files, then load changed files anew."""
+        """Drop rows of the ``stale`` source ids, then load ``ids`` files anew.
+
+        New rows get the next rowids, in date order within the batch, so
+        newly synced judgments land at the newest end of the rowid order.
+        """
         dropped = 0
-        for source in changed + removed:
+        for source in stale:
             # An external-content index must be told the old values to unindex.
             out.execute(
                 "INSERT INTO corpus_fts(corpus_fts, rowid, title, description, "
@@ -983,7 +1045,7 @@ class OpenJudgmentsClient:
             dropped += out.execute(
                 "DELETE FROM corpus WHERE _source = ?", (source,)
             ).rowcount
-        if not changed:
+        if not ids:
             return dropped, 0
 
         sql, _globs = self._search_sql("all")
@@ -993,13 +1055,10 @@ class OpenJudgmentsClient:
         added = 0
         scan = self._scan()
         try:
-            # DuckDB prunes files on the filename filter, so only the changed
-            # Parquet files are read.
-            cursor = scan.execute(
-                f"SELECT * FROM ({sql}) WHERE _source IN "
-                f"({', '.join('?' * len(changed))})",
-                changed,
-            )
+            # The join on the changed paths also lets DuckDB prune the scan to
+            # those Parquet files.
+            self._source_table(scan, ids)
+            cursor = scan.execute(self._scan_sql(sql))
             columns = [d[0] for d in cursor.description]
             insert = (
                 f"INSERT INTO corpus ({', '.join(columns)}) "
@@ -1437,7 +1496,7 @@ class OpenJudgmentsClient:
         judge: Optional[str],
         limit: int,
         offset: int = 0,
-    ) -> Optional[List[SearchResult]]:
+    ) -> Optional["SearchResults"]:
         """BM25-ranked search over the built FTS5 index.
 
         Each plain word of three or more characters is an FTS5 prefix match
@@ -1445,19 +1504,21 @@ class OpenJudgmentsClient:
         ``%term%`` test, so it needs no per-row re-check. Other terms are
         re-checked with LIKE on the narrowed candidates. Returns ``None`` when
         nothing in the query is indexable; the caller then falls back to the
-        LIKE scan.
+        LIKE scan. Queries matching more than ``FTS_RANK_LIMIT`` judgments
+        are listed newest first instead of ranked, flagged ``broad``.
         """
         conditions: List[str] = []
         params: List[Any] = []
-        phrases: List[str] = []
+        words: List[str] = []  # FTS5 terms; matched as prefixes when ranked
+        common: List[str] = []  # stopwords, used only if nothing else is
 
         for term in [t for t in re.split(r"\s+", query.strip()) if t]:
             lowered = term.lower()
-            words = re.findall(r"\w+", lowered)
-            longest = max(words, key=len, default="")
-            plain = len(words) == 1 and words[0] == lowered
+            parts = re.findall(r"\w+", lowered)
+            longest = max(parts, key=len, default="")
+            plain = len(parts) == 1 and parts[0] == lowered
             if plain and len(lowered) >= 3 and lowered not in _FTS_STOPWORDS:
-                phrases.append(f'"{lowered}"*')
+                words.append(lowered)
                 continue
             # Stopwords, very short terms and punctuated terms have doclists
             # spanning millions of rows ("of" alone matches most titles), or
@@ -1467,14 +1528,28 @@ class OpenJudgmentsClient:
             like = f"%{lowered}%"
             params.extend([like, like])
             if not plain and len(longest) >= 3:
-                phrases.append(f'"{longest}"*')
-        if not phrases:
+                words.append(longest)
+            elif len(longest) >= 3:
+                common.append(longest)
+        # A query of nothing but common words ("state") still has to go
+        # through FTS5: the LIKE fallback scans every row.
+        words = words or common
+        if not words:
             return None
 
-        match = "{title description} : (" + " AND ".join(phrases) + ")"
-        if scope != "all":
-            court_tokens = " ".join(re.findall(r"[A-Za-z0-9]+", scope))
-            match += f' AND court_code : "{court_tokens}"'
+        def match(prefix: bool) -> str:
+            star = "*" if prefix else ""
+            expr = (
+                "{title description} : ("
+                + " AND ".join(f'"{w}"{star}' for w in words)
+                + ")"
+            )
+            if scope != "all":
+                court_tokens = " ".join(re.findall(r"[A-Za-z0-9]+", scope))
+                expr += f' AND court_code : "{court_tokens}"'
+            return expr
+
+        filtered = bool(judge or from_date or to_date)
         if judge:
             conditions.append("lower(c.judge) LIKE ?")
             params.append(f"%{judge.lower()}%")
@@ -1484,40 +1559,70 @@ class OpenJudgmentsClient:
         if to_date:
             conditions.append("date(c.decision_date) <= date(?)")
             params.append(to_date)
+        extra = "".join(f" AND {cond}" for cond in conditions)
+
+        # Too broad to rank: BM25 scores every match (38s for "state", 10.7M
+        # hits). Rowids follow decision date (see _scan_sql), so walking
+        # exact-token matches by descending rowid lists the newest first in
+        # milliseconds. A window past the page is re-sorted on the real date
+        # to absorb the slight disorder incremental updates introduce.
+        # ponytail: judge/date filters keep the ranked path, since a selective
+        # filter could walk most of the corpus; bound the walk by rowid if
+        # filtered broad queries turn out to be common.
+        broad_sql = (
+            "WITH cand AS MATERIALIZED (SELECT c.* FROM corpus_fts "
+            "JOIN corpus c ON c.id = corpus_fts.rowid "
+            f"WHERE corpus_fts MATCH ?{extra} "
+            "ORDER BY corpus_fts.rowid DESC LIMIT ?) "
+            "SELECT * FROM cand ORDER BY decision_date DESC, id DESC "
+            "LIMIT ? OFFSET ?"
+        )
+        broad_params = [match(False), *params, offset + limit + 500, limit, offset]
 
         # Rank inside the FTS index and fetch corpus rows only for the page:
         # sorting on a corpus column (the old date tie-break) made SQLite read
         # the full row of every match, 91s for a one-word query. Row-level
         # filters still need the rows, so then the page is cut after them.
-        # ponytail: bm25 still scores every match (~38s for "state", 10.7M
-        # hits); cap or pre-filter broad queries if those become common.
         hits = (
             "SELECT rowid AS id, bm25(corpus_fts, 1.0, 1.0, 0.0) AS score "
             "FROM corpus_fts WHERE corpus_fts MATCH ?"
         )
         order = "ORDER BY hits.score, hits.id DESC"
         if conditions:
-            full_sql = (
+            ranked_sql = (
                 f"WITH hits AS ({hits}) SELECT c.* FROM hits "
                 f"JOIN corpus c ON c.id = hits.id "
                 f"WHERE {' AND '.join(conditions)} {order} LIMIT ? OFFSET ?"
             )
-            params = [match, *params, limit, offset]
+            ranked_params = [match(True), *params, limit, offset]
         else:
-            full_sql = (
+            ranked_sql = (
                 f"WITH hits AS ({hits} ORDER BY score, id DESC LIMIT ? OFFSET ?) "
                 f"SELECT c.* FROM hits JOIN corpus c ON c.id = hits.id {order}"
             )
-            params = [match, limit, offset]
+            ranked_params = [match(True), limit, offset]
 
-        def _run() -> List[Dict[str, Any]]:
+        def _run() -> Tuple[bool, List[Dict[str, Any]]]:
             con = self._connect_fts()
-            cursor = con.execute(full_sql, params)
+            broad = not filtered and (
+                con.execute(
+                    "SELECT count(*) FROM (SELECT 1 FROM corpus_fts "
+                    "WHERE corpus_fts MATCH ? LIMIT ?)",
+                    (match(False), FTS_RANK_LIMIT + 1),
+                ).fetchone()[0]
+                > FTS_RANK_LIMIT
+            )
+            sql, args = (
+                (broad_sql, broad_params) if broad else (ranked_sql, ranked_params)
+            )
+            cursor = con.execute(sql, args)
             columns = [d[0] for d in cursor.description]
-            return [dict(zip(columns, row)) for row in cursor.fetchall()]
+            return broad, [dict(zip(columns, row)) for row in cursor.fetchall()]
 
-        rows = await asyncio.to_thread(_run)
-        return [self._row_to_result(row) for row in rows]
+        broad, rows = await asyncio.to_thread(_run)
+        results = SearchResults(self._row_to_result(row) for row in rows)
+        results.broad = broad
+        return results
 
     def _row_to_result(self, row: Dict[str, Any]) -> SearchResult:
         """Build a SearchResult from a metadata row dict."""

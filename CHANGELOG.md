@@ -21,6 +21,14 @@ This project uses [GitHub Releases](https://github.com/redhat-data-and-ai/legal-
   no disk for a second copy of the index. `force=True` (`make fts`) still
   does a full rebuild; an index built before per-file tracking gets one
   automatically.
+- Case-law queries matching more than 100,000 judgments are listed newest
+  first instead of BM25-ranked, with `ordering: "newest_first"` and a notice
+  asking for narrower terms; BM25 had to score every match (15-35s for
+  "india" or "criminal appeal"). The index assigns rowids in decision-date
+  order so this is a cheap walk. Queries of only common words ("state") now
+  use the index instead of the full LIKE scan. Source files are stored as
+  integer ids, shrinking the index by about 3 GB. Needs one full rebuild
+  (`make fts`); the next update triggers it automatically.
 - uvicorn no longer loads websocket support (`ws="none"`); no MCP transport
   uses it, and it pulled in the deprecated `websockets.legacy` module.
 
