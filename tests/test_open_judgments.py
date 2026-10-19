@@ -805,6 +805,26 @@ class TestFullTextIndex:
         assert dates == sorted(dates)
         assert sources == {int}
 
+    def test_build_orders_rows_across_years(self, corpus):
+        """Years are loaded oldest first, each sorted, so rowids stay in order."""
+        import sqlite3
+
+        older = dict(SC_ROWS[0], decision_date="01-02-2019", path="old_1")
+        _write_parquet(
+            [older], corpus.sc_metadata_dir / "year=2019" / "metadata.parquet"
+        )
+        year_sql, _ = corpus._search_sql("all", "2019")
+        assert "year=2019" in year_sql and "year=*" not in year_sql
+
+        self._build(corpus)
+        con = sqlite3.connect(corpus._fts_path())
+        dates = [
+            d for (d,) in con.execute("SELECT decision_date FROM corpus ORDER BY id")
+        ]
+        con.close()
+        assert dates[0] == "2019-02-01"
+        assert dates == sorted(dates)
+
     @pytest.mark.asyncio
     async def test_broad_query_lists_newest_first(self, corpus):
         """Past the rank limit, matches come back by date and are flagged."""

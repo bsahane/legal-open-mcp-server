@@ -811,29 +811,44 @@ class OpenJudgmentsClient:
             )
         return scan
 
+    def _years(self, scan: Any, sql: str) -> List[str]:
+        """Every year in the corpus, oldest first, ``"NULL"`` leading."""
+        found = {
+            row[0]
+            for row in scan.execute(f"SELECT DISTINCT year FROM ({sql})").fetchall()
+        }
+        dated = sorted(y for y in found if y is not None)
+        return (["NULL"] if None in found else []) + dated
+
     @staticmethod
-    def _source_table(scan: Any, ids: Dict[str, int]) -> None:
-        """Load a path -> integer id map into DuckDB for the scan to join on.
+    def _insert_rows(
+        out: sqlite3.Connection, cursor: Any, ids: Dict[str, int], create: bool
+    ) -> int:
+        """Copy a DuckDB result into ``corpus``, paths swapped for source ids.
 
         Rows store the integer, not the path: 16M copies of a ~90-byte path
-        plus their index cost about 3 GB of the index file.
+        plus their index cost about 3 GB of the index file. A row from a file
+        that appeared after the snapshot is skipped; the next incremental
+        update picks that file up.
         """
-        scan.execute("CREATE TEMP TABLE src (path VARCHAR, id INTEGER)")
-        scan.executemany("INSERT INTO src VALUES (?, ?)", list(ids.items()))
-
-    @staticmethod
-    def _scan_sql(sql: str) -> str:
-        """Scan in decision-date order, tagging each row with its source id.
-
-        Inserting oldest first gives rowids in date order, so FTS5 can list
-        matches newest-first just by walking rowids downwards - the cheap path
-        for queries too broad to rank (see _search_fts).
-        """
-        return (
-            f"SELECT t.* REPLACE (s.id AS _source) FROM ({sql}) t "
-            f"JOIN src s ON s.path = t._source "
-            f"ORDER BY t.decision_date NULLS FIRST"
+        columns = [d[0] for d in cursor.description]
+        if create:
+            out.execute(
+                "CREATE TABLE IF NOT EXISTS corpus (id INTEGER PRIMARY KEY, "
+                + ", ".join(columns)
+                + ")"
+            )
+        k = columns.index("_source")
+        insert = (
+            f"INSERT INTO corpus ({', '.join(columns)}) "
+            f"VALUES ({', '.join('?' * len(columns))})"
         )
+        added = 0
+        while batch := cursor.fetchmany(50_000):
+            rows = [r[:k] + (ids[r[k]],) + r[k + 1 :] for r in batch if r[k] in ids]
+            out.executemany(insert, rows)
+            added += len(rows)
+        return added
 
     def _full_build(self) -> Dict[str, Any]:
         """Build the whole index into a side file and swap it in."""
@@ -858,22 +873,21 @@ class OpenJudgmentsClient:
             out.execute("PRAGMA journal_mode=OFF")
             out.execute("PRAGMA synchronous=OFF")
             out.execute("PRAGMA cache_size=-262144")  # 256 MiB
-            self._source_table(scan, ids)
-            cursor = scan.execute(self._scan_sql(sql))
-            columns = [d[0] for d in cursor.description]
-            out.execute(
-                "CREATE TABLE corpus (id INTEGER PRIMARY KEY, "
-                + ", ".join(columns)
-                + ")"
-            )
-            insert = (
-                f"INSERT INTO corpus ({', '.join(columns)}) "
-                f"VALUES ({', '.join('?' * len(columns))})"
-            )
+            # Oldest first, one year at a time, so rowids follow decision
+            # date: FTS5 can then list matches newest-first just by walking
+            # rowids downwards, the cheap path for queries too broad to rank
+            # (see _search_fts). Sorting all 16M rows at once ran DuckDB out
+            # of memory in a 4 GB container; one year's partition fits.
             logger.info("FTS build: streaming metadata Parquet into SQLite")
-            while batch := cursor.fetchmany(50_000):
-                out.executemany(insert, batch)
-                count += len(batch)
+            for year in self._years(scan, sql):
+                try:
+                    year_sql, _ = self._search_sql("all", year)
+                except CorpusNotSynced:
+                    continue
+                cursor = scan.execute(
+                    f"SELECT * FROM ({year_sql}) ORDER BY decision_date NULLS FIRST"
+                )
+                count += self._insert_rows(out, cursor, ids, create=True)
             out.commit()
             logger.info(
                 f"FTS build: corpus table ready with {count} rows "
@@ -1055,18 +1069,14 @@ class OpenJudgmentsClient:
         added = 0
         scan = self._scan()
         try:
-            # The join on the changed paths also lets DuckDB prune the scan to
-            # those Parquet files.
-            self._source_table(scan, ids)
-            cursor = scan.execute(self._scan_sql(sql))
-            columns = [d[0] for d in cursor.description]
-            insert = (
-                f"INSERT INTO corpus ({', '.join(columns)}) "
-                f"VALUES ({', '.join('?' * len(columns))})"
+            # A filter on the filename lets DuckDB prune the scan to the
+            # changed Parquet files.
+            cursor = scan.execute(
+                f"SELECT * FROM ({sql}) WHERE _source IN "
+                f"({', '.join('?' * len(ids))}) ORDER BY decision_date NULLS FIRST",
+                list(ids),
             )
-            while batch := cursor.fetchmany(50_000):
-                out.executemany(insert, batch)
-                added += len(batch)
+            added = self._insert_rows(out, cursor, ids, create=False)
         finally:
             scan.close()
         out.execute(
@@ -1198,11 +1208,16 @@ class OpenJudgmentsClient:
         """Retire cached DuckDB connections; see :meth:`_close_duckdb_handles`."""
         self._close_duckdb_handles()
 
-    def _search_sql(self, scope: str) -> Tuple[str, List[str]]:
+    def _search_sql(
+        self, scope: str, year: Optional[str] = None
+    ) -> Tuple[str, List[str]]:
         """Build the UNION query covering the requested scope.
 
         Args:
             scope: ``"SC"``, a High Court code, or ``"all"``.
+            year: Restrict to one year (``"NULL"`` for rows without one). The
+                Supreme Court and High Court globs narrow to that ``year=``
+                directory, so DuckDB never opens other years' files.
 
         Returns:
             ``(sql, globs_used)``. The SQL exposes one uniform column set.
@@ -1212,9 +1227,19 @@ class OpenJudgmentsClient:
 
         want_sc = scope in ("SC", "all")
         want_hc = scope != "SC"
+        part = f"year={year}" if year else "year=*"
+        year_clause = ""
+        if year == "NULL":
+            year_clause = "year IS NULL"
+        elif year:
+            year_clause = f"CAST(year AS VARCHAR) = '{_sql_quote(year)}'"
+        sc_glob = str(self.sc_metadata_dir / part / "metadata.parquet")
+        hc_glob = str(
+            self.hc_metadata_dir / part / "court=*" / "bench=*" / "metadata.parquet"
+        )
 
-        if want_sc and any(self.sc_metadata_dir.glob("year=*/metadata.parquet")):
-            globs.append(self._sc_glob())
+        if want_sc and any(self.sc_metadata_dir.glob(f"{part}/metadata.parquet")):
+            globs.append(sc_glob)
             parts.append(
                 f"""
                 SELECT
@@ -1239,14 +1264,14 @@ class OpenJudgmentsClient:
                     'od'                       AS src,
                     NULL                       AS source_url,
                     filename                   AS _source
-                FROM read_parquet('{_sql_quote(self._sc_glob())}', hive_partitioning = true, union_by_name = true, filename = true)
+                FROM read_parquet('{_sql_quote(sc_glob)}', hive_partitioning = true, union_by_name = true, filename = true)
                 """
             )
 
         if want_hc and any(
-            self.hc_metadata_dir.glob("year=*/court=*/bench=*/metadata.parquet")
+            self.hc_metadata_dir.glob(f"{part}/court=*/bench=*/metadata.parquet")
         ):
-            globs.append(self._hc_glob())
+            globs.append(hc_glob)
             court_filter = ""
             if scope not in ("all", "SC"):
                 court_filter = f"WHERE court = '{_sql_quote(scope)}'"
@@ -1268,7 +1293,7 @@ class OpenJudgmentsClient:
                     'od'                       AS src,
                     NULL                       AS source_url,
                     filename                   AS _source
-                FROM read_parquet('{_sql_quote(self._hc_glob())}', hive_partitioning = true, union_by_name = true, filename = true)
+                FROM read_parquet('{_sql_quote(hc_glob)}', hive_partitioning = true, union_by_name = true, filename = true)
                 {court_filter}
                 """
             )
@@ -1279,9 +1304,10 @@ class OpenJudgmentsClient:
         hist_courts = self._historical_courts()
         if hist_courts and (scope in ("all",) or scope in hist_courts):
             globs.append(self._historical_glob())
-            hist_filter = ""
-            if scope not in ("all", "SC"):
-                hist_filter = f"WHERE court = '{_sql_quote(scope)}'"
+            hist_filter = self._where(
+                f"court = '{_sql_quote(scope)}'" if scope not in ("all", "SC") else "",
+                year_clause,
+            )
             parts.append(
                 f"""
                 SELECT
@@ -1311,9 +1337,10 @@ class OpenJudgmentsClient:
         recent_courts = self._recent_courts()
         if recent_courts and (scope in ("all",) or scope in recent_courts):
             globs.append(self._recent_glob())
-            recent_filter = ""
-            if scope not in ("all", "SC"):
-                recent_filter = f"WHERE court = '{_sql_quote(scope)}'"
+            recent_filter = self._where(
+                f"court = '{_sql_quote(scope)}'" if scope not in ("all", "SC") else "",
+                year_clause,
+            )
             parts.append(
                 f"""
                 SELECT
@@ -1345,6 +1372,12 @@ class OpenJudgmentsClient:
             )
 
         return " UNION ALL ".join(parts), globs
+
+    @staticmethod
+    def _where(*clauses: str) -> str:
+        """Join the non-empty clauses into a WHERE, or nothing."""
+        kept = [c for c in clauses if c]
+        return f"WHERE {' AND '.join(kept)}" if kept else ""
 
     def _historical_courts(self) -> set:
         """Court codes that have a digitized historical corpus locally."""
@@ -1562,7 +1595,7 @@ class OpenJudgmentsClient:
         extra = "".join(f" AND {cond}" for cond in conditions)
 
         # Too broad to rank: BM25 scores every match (38s for "state", 10.7M
-        # hits). Rowids follow decision date (see _scan_sql), so walking
+        # hits). Rowids follow decision date (see _full_build), so walking
         # exact-token matches by descending rowid lists the newest first in
         # milliseconds. A window past the page is re-sorted on the real date
         # to absorb the slight disorder incremental updates introduce.
