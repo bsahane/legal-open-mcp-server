@@ -5,6 +5,7 @@ indexing and BM25 search are all genuinely exercised; only HTTP is mocked.
 """
 
 import os
+from concurrent.futures import ThreadPoolExecutor
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
@@ -65,6 +66,13 @@ def _http(urls):
         return SimpleNamespace(status_code=404, content=b"")
 
     return get
+
+
+@pytest.fixture(autouse=True)
+def _threads_not_processes():
+    """Extract in threads: spawning a process under coverage costs ~6s per build."""
+    with patch.object(body_index, "ProcessPoolExecutor", ThreadPoolExecutor):
+        yield
 
 
 @pytest.fixture

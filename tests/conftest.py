@@ -16,6 +16,10 @@ try:  # pragma: no cover - environment dependent
 except Exception:  # pragma: no cover - duckdb is optional at import time
     pass
 
+# Same for pypdf, for speed rather than correctness: a re-import after each
+# patch.dict reruns pypdf's huge glyph-table module, about 5s under coverage.
+import pypdf  # noqa: E402,F401
+
 
 @pytest.fixture
 def mock_settings():
