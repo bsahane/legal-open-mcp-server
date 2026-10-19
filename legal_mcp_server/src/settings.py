@@ -356,6 +356,18 @@ class Settings(BaseSettings):
             "example": "./data/case_law",
         },
     )
+    FTS_BUILD_TEMP_DIR: Optional[str] = Field(
+        default=None,
+        json_schema_extra={
+            "env": "FTS_BUILD_TEMP_DIR",
+            "description": (
+                "Scratch directory for DuckDB spill while building the FTS "
+                "index. A full-corpus build spills tens of GB; unset keeps it "
+                "beside the index file."
+            ),
+            "example": "/mnt/scratch/duckdb",
+        },
+    )
     OPEN_DATA_SC_BUCKET: str = Field(
         default="indian-supreme-court-judgments",
         json_schema_extra={

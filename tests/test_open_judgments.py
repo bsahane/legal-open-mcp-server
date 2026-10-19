@@ -640,6 +640,24 @@ class TestFullTextIndex:
         ).fetchone()
         assert hits is not None
 
+    def test_build_uses_temp_dir_and_clears_crash_leftovers(self, corpus, tmp_path):
+        """A crashed build's WAL and spill dir must not survive the next build."""
+        live = corpus._fts_path()
+        live.parent.mkdir(parents=True, exist_ok=True)
+        wal = live.with_name("corpus.duckdb.building.wal")
+        spill = live.with_name("corpus.duckdb.building.tmp")
+        wal.write_bytes(b"stale")
+        spill.mkdir()
+        scratch = tmp_path / "scratch"
+
+        with patch.object(open_judgments.settings, "FTS_BUILD_TEMP_DIR", str(scratch)):
+            result = self._build(corpus)
+
+        assert result["rebuilt"] is True
+        assert scratch.is_dir()
+        assert not wal.exists()
+        assert not spill.exists()
+
     def test_stale_after_newer_metadata(self, corpus):
         self._build(corpus)
         assert corpus._fts_available() is True

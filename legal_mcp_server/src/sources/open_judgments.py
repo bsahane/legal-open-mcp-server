@@ -29,6 +29,7 @@ from __future__ import annotations
 import asyncio
 import os
 import re
+import shutil
 import threading
 import time
 from dataclasses import dataclass, field
@@ -772,7 +773,7 @@ class OpenJudgmentsClient:
         # build that dies midway would otherwise leave a corpus table with no
         # BM25 index that still looks fresh to _fts_available.
         building = path.with_name(path.name + ".building")
-        building.unlink(missing_ok=True)
+        self._discard_build(building)
         con = duckdb.connect(str(building))
         started = time.monotonic()
         try:
@@ -781,6 +782,13 @@ class OpenJudgmentsClient:
             # killed mid-write, and disable insertion-order preservation so
             # the corpus table streams straight to disk.
             self._apply_duckdb_resource_guards(con)
+            # Indexing 16M rows spills well over 20 GB; let that scratch live
+            # on a bigger, cheaper disk than the finished index.
+            if settings.FTS_BUILD_TEMP_DIR:
+                Path(settings.FTS_BUILD_TEMP_DIR).mkdir(parents=True, exist_ok=True)
+                con.execute(
+                    f"SET temp_directory='{_sql_quote(settings.FTS_BUILD_TEMP_DIR)}'"
+                )
             con.execute("LOAD fts")
             logger.info("FTS build: dropping stale tables (if any)")
             # A previous index leaves catalog metadata behind even once its
@@ -823,7 +831,7 @@ class OpenJudgmentsClient:
             )
         except BaseException:
             con.close()
-            building.unlink(missing_ok=True)
+            self._discard_build(building)
             raise
         con.close()
         os.replace(building, path)
@@ -844,6 +852,13 @@ class OpenJudgmentsClient:
                 f"{elapsed:.1f}s. Search now uses BM25 ranking."
             ),
         }
+
+    @staticmethod
+    def _discard_build(building: Path) -> None:
+        """Remove a side-file build with its WAL and default spill directory."""
+        building.unlink(missing_ok=True)
+        building.with_name(building.name + ".wal").unlink(missing_ok=True)
+        shutil.rmtree(building.with_name(building.name + ".tmp"), ignore_errors=True)
 
     @staticmethod
     def _container_memory_bytes() -> Optional[int]:
