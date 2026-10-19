@@ -915,7 +915,7 @@ class OpenJudgmentsClient:
             # substring semantics far better than stemmed tokens do.
             out.execute(
                 "CREATE VIRTUAL TABLE corpus_fts USING fts5("
-                "title, description, court_code, "
+                "title, description, court_code, judge, "
                 "content='corpus', content_rowid='id', "
                 "tokenize='unicode61 remove_diacritics 2')"
             )
@@ -972,6 +972,8 @@ class OpenJudgmentsClient:
                         "SELECT id, path, mtime_ns FROM fts_sources"
                     ).fetchall()
                 }
+                # Indexes from before the judge column need a full build.
+                out.execute("SELECT judge FROM corpus_fts WHERE 0").fetchall()
             except sqlite3.DatabaseError:
                 return None
             current = self._metadata_files()
@@ -1058,8 +1060,8 @@ class OpenJudgmentsClient:
             # An external-content index must be told the old values to unindex.
             out.execute(
                 "INSERT INTO corpus_fts(corpus_fts, rowid, title, description, "
-                "court_code) SELECT 'delete', id, title, description, "
-                "court_code FROM corpus WHERE _source = ?",
+                "court_code, judge) SELECT 'delete', id, title, description, "
+                "court_code, judge FROM corpus WHERE _source = ?",
                 (source,),
             )
             dropped += out.execute(
@@ -1086,8 +1088,9 @@ class OpenJudgmentsClient:
         finally:
             scan.close()
         out.execute(
-            "INSERT INTO corpus_fts(rowid, title, description, court_code) "
-            "SELECT id, title, description, court_code FROM corpus WHERE id >= ?",
+            "INSERT INTO corpus_fts(rowid, title, description, court_code, judge) "
+            "SELECT id, title, description, court_code, judge FROM corpus "
+            "WHERE id >= ?",
             (first_new,),
         )
         return dropped, added
@@ -1544,8 +1547,7 @@ class OpenJudgmentsClient:
         re-checked with LIKE on the narrowed candidates. Returns ``None`` when
         nothing in the query is indexable; the caller then falls back to the
         LIKE scan. Queries matching more than ``FTS_RANK_LIMIT`` judgments
-        (and not filtered by judge) are listed newest first instead of
-        ranked, flagged ``broad``.
+        are listed newest first instead of ranked, flagged ``broad``.
         """
         conditions: List[str] = []
         params: List[Any] = []
@@ -1587,7 +1589,21 @@ class OpenJudgmentsClient:
             if scope != "all":
                 court_tokens = " ".join(re.findall(r"[A-Za-z0-9]+", scope))
                 expr += f' AND court_code : "{court_tokens}"'
+            if judge_words:
+                # Always prefix: judge doclists are small, and "Chandra"
+                # should still find "CHANDRACHUD" as the LIKE check would.
+                expr += (
+                    " AND judge : ("
+                    + " AND ".join(f'"{w}"*' for w in judge_words)
+                    + ")"
+                )
             return expr
+
+        # Judge names narrow inside FTS5 (initials and other short parts are
+        # left to the exact LIKE check below, which always applies).
+        judge_words = [
+            w for w in re.findall(r"\w+", (judge or "").lower()) if len(w) >= 3
+        ]
 
         if judge:
             conditions.append("lower(c.judge) LIKE ?")
@@ -1607,8 +1623,8 @@ class OpenJudgmentsClient:
         # rowid range by binary search. Rows appended since the build sit
         # above that range and are few, so they are scanned outright. A window
         # past the page is re-sorted on the real date.
-        # ponytail: a judge filter keeps the ranked path, since a selective
-        # judge could walk most of the corpus.
+        # A judge filter is matched inside FTS5 too, so the walk only visits
+        # that judge's rows.
         walk = (
             "SELECT c.* FROM corpus_fts JOIN corpus c ON c.id = corpus_fts.rowid "
             f"WHERE corpus_fts MATCH ? AND corpus_fts.rowid BETWEEN ? AND ?{extra}"
@@ -1626,7 +1642,7 @@ class OpenJudgmentsClient:
         # the full row of every match, 91s for a one-word query. Row-level
         # filters still need the rows, so then the page is cut after them.
         hits = (
-            "SELECT rowid AS id, bm25(corpus_fts, 1.0, 1.0, 0.0) AS score "
+            "SELECT rowid AS id, bm25(corpus_fts, 1.0, 1.0, 0.0, 0.0) AS score "
             "FROM corpus_fts WHERE corpus_fts MATCH ?"
         )
         order = "ORDER BY hits.score, hits.id DESC"
@@ -1647,7 +1663,7 @@ class OpenJudgmentsClient:
         def _run() -> Tuple[bool, List[Dict[str, Any]]]:
             con = self._connect_fts()
             bounds = None
-            if not judge and (
+            if (
                 con.execute(
                     "SELECT count(*) FROM (SELECT 1 FROM corpus_fts "
                     "WHERE corpus_fts MATCH ? LIMIT ?)",

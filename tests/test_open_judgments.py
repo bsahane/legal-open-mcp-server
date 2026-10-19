@@ -877,13 +877,45 @@ class TestFullTextIndex:
         assert len(hits) == 2
 
     @pytest.mark.asyncio
-    async def test_filtered_broad_query_stays_ranked(self, corpus):
-        """A judge or date filter keeps the ranked path, which stays exact."""
+    async def test_judge_filter_narrows_inside_fts(self, corpus):
+        """Judge names match in FTS5; prefixes work; the LIKE check still applies."""
         self._build(corpus)
-        with patch.object(open_judgments, "FTS_RANK_LIMIT", 1):
-            hits = await corpus.search("Bihar", judge="Trivedi")
-        assert hits.broad is False
-        assert [h.judge for h in hits] == ["BELA M. TRIVEDI"]
+        with patch.object(corpus, "_connect", side_effect=AssertionError("LIKE")):
+            full = await corpus.search("Bihar", judge="Trivedi")
+            prefix = await corpus.search("Bihar", judge="Triv")
+            initials = await corpus.search("Bihar", judge="Bela M. Trivedi")
+            other = await corpus.search("Bihar", judge="Chandrachud")
+        assert [h.judge for h in full] == ["BELA M. TRIVEDI"]
+        assert [h.judge for h in prefix] == ["BELA M. TRIVEDI"]
+        assert [h.judge for h in initials] == ["BELA M. TRIVEDI"]
+        assert other == []
+
+    @pytest.mark.asyncio
+    async def test_judge_filtered_broad_query_walks_newest_first(self, corpus):
+        """A judge filter no longer forces the slow ranked path."""
+        self._build(corpus)
+        with patch.object(open_judgments, "FTS_RANK_LIMIT", 0):
+            hits = await corpus.search("Bihar", judge="Dhulia")
+        assert hits.broad is True
+        assert [h.judge for h in hits] == ["SUDHANSHU DHULIA"]
+
+    def test_index_without_judge_column_gets_full_build(self, corpus):
+        """An index from before the judge column cannot be patched in place."""
+        import sqlite3
+
+        self._build(corpus)
+        con = sqlite3.connect(corpus._fts_path())
+        con.execute("DROP TABLE corpus_fts")
+        con.execute(
+            "CREATE VIRTUAL TABLE corpus_fts USING fts5(title, description, "
+            "court_code, content='corpus', content_rowid='id')"
+        )
+        con.commit()
+        con.close()
+
+        result = corpus.build_fts_index()
+
+        assert result["rebuilt"] is True
 
     @pytest.mark.asyncio
     async def test_common_word_only_query_uses_fts(self, corpus):
